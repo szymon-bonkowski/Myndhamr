@@ -1,0 +1,9 @@
+package io.github.szymonbonkowski.myndhamr
+
+class Greeting {
+    private val platform = getPlatform()
+
+    fun greet(): String {
+        return sayHello(platform.name)
+    }
+}
