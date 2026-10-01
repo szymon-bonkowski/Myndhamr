@@ -137,6 +137,25 @@ class CaptureProjectTest {
         var visited = 0L; CaptureProject.visitImu(root) { visited++ }; assertEquals(100_000, visited)
     }
 
+    @Test fun trustedRootAliasWorksButInternalSymlinkIsRejected() {
+        val folder = directory(); val realRoot = File(folder, "real").apply { mkdirs() }
+        val alias = File(folder, "alias")
+        Files.createSymbolicLink(alias.toPath(), realRoot.toPath())
+        val writer = CaptureProject.create(alias, manifest())
+        writer.appendFrame(frame())
+        val outside = File(folder, "outside").apply { mkdirs() }
+        File(realRoot, "assets").mkdirs()
+        Files.createSymbolicLink(File(realRoot, "assets/escape").toPath(), outside.toPath())
+        assertFailsWith<IllegalArgumentException> { writer.writeAsset("assets/escape/secret", byteArrayOf(1), "raw") }
+        Files.delete(File(realRoot, "assets/escape").toPath())
+        writer.finish(200, CaptureState.COMPLETED)
+        assertTrue(CaptureProject.validate(alias).valid)
+        val zip = File(folder, "alias.scan3d")
+        CaptureProject.export(alias, zip)
+        assertTrue(CaptureProject.importPackage(zip, File(folder, "imported")).valid)
+        assertFalse(File(outside, "secret").exists())
+    }
+
     @Test fun unsupportedVersionAndConventionsAreRejected() {
         assertFailsWith<IllegalArgumentException> { CaptureProject.create(directory(), manifest().toBuilder().setFormatVersion(2).build()) }
         assertFailsWith<IllegalArgumentException> { CaptureProject.create(directory(), manifest().toBuilder().setPoseConvention("row-major").build()) }

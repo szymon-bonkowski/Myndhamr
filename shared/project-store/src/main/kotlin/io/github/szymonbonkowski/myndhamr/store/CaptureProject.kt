@@ -142,8 +142,9 @@ object CaptureProject {
         require(!temp.exists())
         try {
             ZipOutputStream(BufferedOutputStream(FileOutputStream(temp))).use { output ->
-                root.walkTopDown().onEnter { directory -> require(directory.canonicalFile == directory.absoluteFile) { "Symlink directory in project" }; true }.filter { it.isFile }.forEach { file ->
-                    val path = file.relativeTo(root).invariantSeparatorsPath
+                val canonicalRoot = root.canonicalFile
+                canonicalRoot.walkTopDown().onEnter { directory -> require(directory.canonicalFile == directory.absoluteFile) { "Symlink directory in project" }; true }.filter { it.isFile }.forEach { file ->
+                    val path = file.relativeTo(canonicalRoot).invariantSeparatorsPath
                     if (path == MANIFEST || path in streamPaths || path.startsWith("assets/") && !path.endsWith(".tmp")) {
                         require(safeFile(root, path).canonicalFile == file.absoluteFile) { "Symlink in project" }
                         output.putNextEntry(ZipEntry(path)); file.inputStream().use { it.copyTo(output) }; output.closeEntry()
@@ -188,8 +189,11 @@ object CaptureProject {
 
     internal fun safeFile(root: File, path: String): File {
         require(path.isNotBlank() && !path.startsWith("/") && '\\' !in path && ':' !in path && path.split('/').none { it.isBlank() || it == "." || it == ".." }) { "Unsafe relative path $path" }
-        val file = File(root, path).absoluteFile
-        require(file.canonicalFile == file && file.canonicalPath.startsWith(root.canonicalPath + File.separator)) { "Path escapes project or traverses symlink: $path" }
+        // The caller-selected root may itself have platform aliases (Android filesDir).
+        // Trust its canonical identity; disallow symlinks only inside that root.
+        val canonicalRoot = root.canonicalFile
+        val file = File(canonicalRoot, path).absoluteFile
+        require(file.canonicalFile == file && file.canonicalPath.startsWith(canonicalRoot.path + File.separator)) { "Path escapes project or traverses symlink: $path" }
         return file
     }
     internal fun hash(file: File): ByteString {
