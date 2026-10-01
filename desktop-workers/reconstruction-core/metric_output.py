@@ -47,7 +47,16 @@ def depth_validation(run, inputs, cameras, points):
                 skip('unavailable_or_not_saved'); continue
             ar_clock = f.get('arClockDomain', f.get('clockDomain'))
             association = 'exact-same-source-clock'
-            if d.get('clockDomain') != ar_clock:
+            provider_raw = (source == 'ARCORE_RAW' and ar_clock == 'ARCORE_FRAME'
+                            and d.get('clockDomain') == 'ARCORE_DEPTH'
+                            and f.get('imageClockDomain') == 'ARCORE_CPU_IMAGE'
+                            and f.get('imageAssociation') == 'ARCORE_CURRENT_FRAME_ACQUIRE_CAMERA_IMAGE'
+                            and d.get('frameAssociation') == 'ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_IMAGE')
+            if provider_raw:
+                # API output is reprojected to this Frame's camera pose. Its original
+                # timestamp identifies the estimate, not the reprojection's pose.
+                association = 'ARCore-same-Frame-raw-depth-reprojection-v1'
+            elif d.get('clockDomain') != ar_clock:
                 # Documented ARCore current-depth test compares these provider timestamps.
                 # This is a frame association, never a global clock conversion.
                 if (ar_clock, d.get('clockDomain')) == ('ARCORE_FRAME', 'ARCORE_DEPTH') and source in ('ARCORE_RAW', 'ARCORE_SMOOTHED'):
@@ -56,9 +65,10 @@ def depth_validation(run, inputs, cameras, points):
                     skip('depth_AR_clock_mapping_unavailable'); continue
             provenance[-1]['derivedFrameAssociationPolicy'] = association
             delta = int(d['timestampNs']) - int(f.get('arTimestampNs', f['timestampNs']))
-            # Raw depth can legitimately repeat an earlier measurement. Such maps must not
-            # be compared to a later optimized camera without an association model.
-            if delta != 0:
+            # Generic/stale maps need exact association. Recognized raw API maps
+            # have a documented current-pose reprojection model, not a new sample.
+            provenance[-1]['depthMinusArTimestampNsUnverified'] = str(delta)
+            if delta != 0 and not provider_raw:
                 skip('depth_timestamp_not_current_AR_frame'); continue
             if len(d.get('cpuToDepthColumnMajor', [])) != 9:
                 skip('missing_measured_pixel_mapping'); continue
@@ -74,11 +84,19 @@ def depth_validation(run, inputs, cameras, points):
             conf = None
             if d.get('confidencePath'):
                 confidence_clock = d.get('confidenceClockDomain')
+                provider_confidence = (provider_raw and confidence_clock == 'ARCORE_DEPTH_CONFIDENCE'
+                                       and d.get('confidenceAssociation') == 'ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_CONFIDENCE')
                 paired = (d.get('clockDomain'), confidence_clock) == ('ARCORE_DEPTH', 'ARCORE_DEPTH_CONFIDENCE') and source == 'ARCORE_RAW'
                 if confidence_clock is None or (confidence_clock != d.get('clockDomain') and not paired):
                     skip('confidence_depth_clock_mapping_unavailable'); continue
-                provenance[-1]['derivedConfidenceAssociationPolicy'] = 'ARCore-provider-paired-raw-confidence' if paired else 'exact-same-source-clock'
-                if d.get('confidenceTimestampNs') is None or int(d['confidenceTimestampNs']) != int(d['timestampNs']):
+                provenance[-1]['derivedConfidenceAssociationPolicy'] = ('ARCore-same-Frame-raw-confidence-v1' if provider_confidence
+                                                                         else 'ARCore-provider-paired-raw-confidence' if paired
+                                                                         else 'exact-same-source-clock')
+                if d.get('confidenceTimestampNs') is None:
+                    skip('confidence_depth_timestamp_mismatch'); continue
+                confidence_delta = int(d['confidenceTimestampNs']) - int(d['timestampNs'])
+                provenance[-1]['confidenceMinusDepthTimestampNsUnverified'] = str(confidence_delta)
+                if confidence_delta != 0 and not provider_confidence:
                     skip('confidence_depth_timestamp_mismatch'); continue
                 conf = np.fromfile(run / d['confidencePath'], dtype='u1')
                 if len(conf) != w*h:
@@ -115,8 +133,8 @@ def depth_validation(run, inputs, cameras, points):
                 entry = samples.setdefault(source, {'absolute': [], 'signed': [], 'relative': [], 'ratio': []})
                 entry['absolute'].append(abs(float(pc[2])-z)); entry['signed'].append(float(pc[2])-z)
                 entry['relative'].append(abs(float(pc[2])-z)/z); entry['ratio'].append(float(pc[2])/z)
-    return {'policy': 'axial optical Z; measured CPU-to-depth H; exact AR timestamp; raw confidence>=128; zero invalid',
-            'uncertainty': 'AR-estimated depth; independent sanity check, not hardware-LiDAR accuracy',
+    return {'policy': 'axial optical Z; measured CPU-to-depth H; explicit same-Frame raw reprojection or exact timestamp association; raw confidence>=128; zero invalid',
+            'uncertainty': 'AR-estimated depth; correlated with AR tracking; consistency sanity check, not independent metric ground truth or hardware-LiDAR accuracy',
             'sources': {s: {'absoluteResidualMeters': summary(v['absolute']), 'signedResidualMeters': summary(v['signed']),
                             'relativeResidual': summary(v['relative']), 'sparseToDepthRatio': summary(v['ratio'])} for s, v in samples.items()},
             'skipped': skipped, 'provenance': provenance}

@@ -37,6 +37,17 @@ int main(){try{
     check((robust.translation_world_sfm-Eigen::Vector3d(3,2,-1)).norm()<0.003,"Noisy robust translation");
     for(std::size_t i=0;i<noisy.size();++i)check(robust.inliers[i]==(i%5!=0),"Outlier classification");
     const auto repeat=myndhamr::align_similarity(noisy);check(repeat.scale==robust.scale,"Non-deterministic robust sampling");
+    // A coherent prefix in an older AR world is a second rigid trajectory,
+    // rather than isolated random noise. Keep every visual correspondence and
+    // recover the majority world without modifying the measured prefix.
+    auto revised=fixture(2.3,rotation,{3,2,-1});
+    const Eigen::Matrix3d old_world=Eigen::AngleAxisd(0.3,Eigen::Vector3d::UnitY()).toRotationMatrix();
+    for(std::size_t i=0;i<4;++i)revised[i].target=old_world*revised[i].target+Eigen::Vector3d(2,-1,3);
+    const auto revision_result=myndhamr::align_similarity(revised);
+    check(std::abs(revision_result.scale/2.3-1)<1e-10,"World revision changed metric scale");
+    check((revision_result.rotation_world_sfm-rotation).norm()<1e-10,"World revision changed rotation");
+    check((revision_result.translation_world_sfm-Eigen::Vector3d(3,2,-1)).norm()<1e-10,"World revision changed translation");
+    for(std::size_t i=0;i<revised.size();++i)check(revision_result.inliers[i]==(i>=4),"World revision prefix consensus");
     rejects({});rejects({{{0,0,0},{0,0,0}},{{1,0,0},{1,0,0}}});
     std::vector<myndhamr::Correspondence> line;for(int i=0;i<10;++i)line.push_back({{double(i),0,0},{double(i),0,0}});rejects(line);
     auto flat=fixture(1,identity,{0,0,0});for(auto& p:flat)p.target={0,0,0};rejects(flat);

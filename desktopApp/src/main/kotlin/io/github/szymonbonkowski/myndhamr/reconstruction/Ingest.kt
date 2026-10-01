@@ -5,6 +5,8 @@ import io.github.szymonbonkowski.myndhamr.domain.RigidTransform
 import io.github.szymonbonkowski.myndhamr.scan.v1.CaptureFrame
 import io.github.szymonbonkowski.myndhamr.scan.v1.CaptureManifest
 import io.github.szymonbonkowski.myndhamr.scan.v1.DepthAvailability
+import io.github.szymonbonkowski.myndhamr.scan.v1.DepthRecord
+import io.github.szymonbonkowski.myndhamr.scan.v1.DepthSource
 import io.github.szymonbonkowski.myndhamr.scan.v1.TrackingState
 import io.github.szymonbonkowski.myndhamr.store.CaptureProject
 import io.github.szymonbonkowski.myndhamr.store.CaptureValidation
@@ -128,6 +130,7 @@ object Ingest {
                     "arClockDomain" to raw.arTimestamp.clockDomain,
                     "imageTimestampNs" to timestamp.valueNs.toString(),
                     "imageClockDomain" to timestamp.clockDomain,
+                    "imageAssociation" to raw.imageAssociation,
                     "name" to imageName,
                     "width" to intrinsics.width,
                     "height" to intrinsics.height,
@@ -145,6 +148,7 @@ object Ingest {
                         val matchingAssets = depthEvidence.filter { it["depthIndex"] == index }
                         val depthAsset = matchingAssets.firstOrNull { it["kind"] == "depth" }
                         val confidenceAsset = matchingAssets.firstOrNull { it["kind"] == "confidence" }
+                        val (frameAssociation, confidenceAssociation) = depthProviderAssociations(raw, depth)
                         linkedMapOf(
                             "source" to depth.source.name,
                             "availability" to depth.availability.name,
@@ -155,6 +159,8 @@ object Ingest {
                             "clockDomain" to if (depth.hasTimestamp()) depth.timestamp.clockDomain else null,
                             "confidenceTimestampNs" to if (depth.hasConfidenceTimestamp()) depth.confidenceTimestamp.valueNs.toString() else null,
                             "confidenceClockDomain" to if (depth.hasConfidenceTimestamp()) depth.confidenceTimestamp.clockDomain else null,
+                            "frameAssociation" to frameAssociation,
+                            "confidenceAssociation" to confidenceAssociation,
                             "cpuToDepthColumnMajor" to depth.cpuToDepthColumnMajorList,
                             "mappingConvention" to depth.mappingConvention,
                             "alignment" to depth.alignment,
@@ -254,6 +260,25 @@ object Ingest {
                 throw IllegalArgumentException("Frame $frameId: image decode failed: ${e.message}", e)
             } finally { reader.dispose() }
         }
+    }
+
+    /** Derived provenance for the recognized v0.1 same-Frame API path; never a clock conversion. */
+    private fun depthProviderAssociations(frame: CaptureFrame, depth: DepthRecord): Pair<String?, String?> {
+        val details = depth.detail.split(';').toSet()
+        val recognized = frame.imageAssociation == CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE &&
+            frame.arTimestamp.clockDomain == "ARCORE_FRAME" && frame.imageTimestamp.clockDomain == "ARCORE_CPU_IMAGE" &&
+            depth.source == DepthSource.ARCORE_RAW && depth.availability == DepthAvailability.AVAILABLE && depth.hasDepth() &&
+            depth.timestamp.clockDomain == "ARCORE_DEPTH" && depth.depth.encoding == "U16_LE;millimeters;axial-Z" &&
+            depth.intrinsics.model == "ARCORE_DEPTH_SCALED_TEXTURE_PINHOLE" && depth.unitMeters == 0.001 &&
+            depth.alignment == "ARCORE_DEPTH_TEXTURE_VIEW;CPU-image-may-be-cropped;texture-intrinsics-scaled;axial-Z-millimeters" &&
+            depth.mappingConvention == "H_depthPixels_cpuImagePixels;column-vectors;column-major3x3;measured-ARCore-crop;outside-depth-bounds=no-correspondence" &&
+            depth.cpuToDepthColumnMajorCount == 9 && "sourceTimestampMayRepeatForReprojection" in details && "assets=stored" in details
+        if (!recognized) return null to null
+        val confidence = depth.hasConfidence() && depth.confidenceAvailability == DepthAvailability.AVAILABLE &&
+            depth.confidenceTimestamp.clockDomain == "ARCORE_DEPTH_CONFIDENCE" &&
+            depth.confidence.encoding == "U8;0-invalid;255-highest" && "association=ARCore-same-frame-paired-API" in details
+        return "ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_IMAGE" to
+            if (confidence) "ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_CONFIDENCE" else null
     }
 
     private fun copyEvidence(root: File, evidenceRoot: File, path: String, frameId: Long, depthIndex: Int, kind: String): Map<String, Any?> {

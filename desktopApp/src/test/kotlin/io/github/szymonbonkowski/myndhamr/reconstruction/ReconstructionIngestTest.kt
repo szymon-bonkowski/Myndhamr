@@ -61,6 +61,27 @@ class ReconstructionIngestTest {
     }
 
     @Test
+    fun derivesRawReprojectionAssociationOnlyFromRecognizedRecorderEvidence() {
+        val parent = Files.createTempDirectory("reconstruction-provider-depth-").toFile()
+        try {
+            val time = 9_007_199_254_740_993L
+            for (recognized in listOf(true, false)) {
+                val root = createProject(File(parent, "scan-$recognized"), 1, time,
+                    includeDepth = true, providerDepth = true, reprojectionMarker = recognized)
+                val before = fileHashes(root)
+                val run = File(parent, "run-$recognized")
+                Ingest.prepare(root, run)
+                val document = File(run, "input.json").readText()
+                assertTrue(document.contains("\"timestampNs\":\"9007198254740993\""))
+                assertTrue(document.contains("\"confidenceTimestampNs\":\"9007199254740993\""))
+                assertEquals(recognized, document.contains("\"frameAssociation\":\"ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_IMAGE\""))
+                assertEquals(recognized, document.contains("\"confidenceAssociation\":\"ARCORE_CURRENT_FRAME_ACQUIRE_RAW_DEPTH_CONFIDENCE\""))
+                assertEquals(before, fileHashes(root))
+            }
+        } finally { parent.deleteRecursively() }
+    }
+
+    @Test
     fun rejectsInvalidProjectUnsupportedEncodingAndMalformedPixelsWithFrameContext() {
         val parent = Files.createTempDirectory("reconstruction-invalid-").toFile()
         try {
@@ -125,6 +146,8 @@ class ReconstructionIngestTest {
         rgbEncoding: String = "i420",
         model: String = "ARCORE_CPU_IMAGE_PINHOLE;unrotated-pixels",
         jpegDimensions: Pair<Int, Int>? = null,
+        providerDepth: Boolean = false,
+        reprojectionMarker: Boolean = true,
     ): File {
         val width = 2
         val height = 2
@@ -157,6 +180,20 @@ class ReconstructionIngestTest {
                     .setTimestamp(timestamp(timestamp, "ARCORE_FRAME")).setWidth(2).setHeight(2).setIntrinsics(calibration)
                     .setAlignment("raw test depth").setUnitMeters(0.001).setDepth(depthAsset))
                     .addDepth(DepthRecord.newBuilder().setSource(DepthSource.ARCORE_SMOOTHED).setAvailability(DepthAvailability.UNSUPPORTED))
+                if (providerDepth) {
+                    val confidence = writer.writeAsset("assets/confidence/$frameId.u8", byteArrayOf(0, -1, -1, 0), "U8;0-invalid;255-highest")
+                    builder.setArTimestamp(timestamp(timestamp + 1_000_000, "ARCORE_FRAME"))
+                    builder.setDepth(0, builder.getDepth(0).toBuilder()
+                        .setTimestamp(timestamp(timestamp - 1_000_000_000, "ARCORE_DEPTH"))
+                        .setIntrinsics(calibration.toBuilder().setModel("ARCORE_DEPTH_SCALED_TEXTURE_PINHOLE"))
+                        .setConfidence(confidence).setConfidenceAvailability(DepthAvailability.AVAILABLE)
+                        .setConfidenceTimestamp(timestamp(timestamp, "ARCORE_DEPTH_CONFIDENCE"))
+                        .setAlignment("ARCORE_DEPTH_TEXTURE_VIEW;CPU-image-may-be-cropped;texture-intrinsics-scaled;axial-Z-millimeters")
+                        .setMappingConvention("H_depthPixels_cpuImagePixels;column-vectors;column-major3x3;measured-ARCore-crop;outside-depth-bounds=no-correspondence")
+                        .addAllCpuToDepthColumnMajor(listOf(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0))
+                        .setDetail("assets=stored;association=ARCore-same-frame-paired-API" +
+                            if (reprojectionMarker) ";sourceTimestampMayRepeatForReprojection" else ""))
+                }
             }
             writer.appendFrame(builder.build())
             if (includeNonKeyframe) {

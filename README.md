@@ -1,6 +1,6 @@
 # Myndhamr
 
-Myndhamr is a measurement-first 3D scanning system. The repository is being built in small, verifiable stages; the modules below describe what exists today, with v0.1 Android capture completed and validated on a physical SM-S948B, and reconstruction deferred.
+Myndhamr is a measurement-first 3D scanning system. The repository includes Android capture validated on a physical SM-S948B and CLI desktop ingest, sparse reconstruction, robust metric alignment and trajectory diagnostics.
 
 ## Current layout
 
@@ -8,11 +8,12 @@ Myndhamr is a measurement-first 3D scanning system. The repository is being buil
 - `shared/domain/` is pure Kotlin Multiplatform domain code, with no UI dependency.
 - `shared/scan-format/` owns versioned Protobuf contracts and generated Java bindings. Its Kotlin/JVM wrapper crosses the JNI boundary into `native/`.
 - `shared/project-store/` provides streaming immutable evidence, interrupted-write recovery and validated ZIP export/import.
-- `desktopApp/` is a headless `inspect`, `replay` and `validate` CLI. It can grow into a desktop product without making the reconstruction engine depend on a GUI.
+- `desktopApp/` provides headless `inspect`, `replay`, `validate`, `ingest` and `reconstruct` commands. Reconstruction remains independent of a GUI.
+- `desktop-workers/colmap-adapter/` isolates pinned COLMAP sparse reconstruction; `desktop-workers/reconstruction-core/` exports metric products and calibrated depth diagnostics using the C++20 similarity estimator in `native/geometry/`.
 - `native/core/`, `native/bindings/`, `native/tests/`, and `native/benchmarks/` contain the C++20 foundation, JNI bridge, host tests, and smoke benchmark.
 - `tests/fixtures/` contains reviewed golden data shared across language boundaries.
 
-Transfer, reconstruction and desktop worker modules remain deferred. v0.1 acceptance passed, including a15min38s moving capture; see the [completed capture ExecPlan](plans/completed/2026-10-01-v0-1-capture-recorder.md); see [capture contracts](docs/adr/0002-capture-evidence-and-clock-contract.md). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system boundaries and invariants, and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the direct dependency and license inventory.
+Dense reconstruction, meshing and transfer remain deferred. v0.1 acceptance includes a15min38s moving capture; see the [completed capture ExecPlan](plans/completed/2026-10-01-v0-1-capture-recorder.md) and [capture contracts](docs/adr/0002-capture-evidence-and-clock-contract.md). See [sparse reconstruction commands and acceptance](docs/SPARSE_RECONSTRUCTION.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system boundaries and invariants, and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the direct dependency and license inventory.
 
 ## Build prerequisites
 
