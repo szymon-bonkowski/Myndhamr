@@ -141,7 +141,7 @@ object Ingest {
                     "sourceImageEncoding" to raw.rgb.encoding,
                     "normalizedImageEncoding" to imageEncoding,
                     "depthEvidence" to depthEvidence,
-                    "depthRecords" to raw.depthList.mapIndexed { index, depth ->
+                    "depth" to raw.depthList.mapIndexed { index, depth ->
                         val matchingAssets = depthEvidence.filter { it["depthIndex"] == index }
                         val depthAsset = matchingAssets.firstOrNull { it["kind"] == "depth" }
                         val confidenceAsset = matchingAssets.firstOrNull { it["kind"] == "confidence" }
@@ -162,6 +162,8 @@ object Ingest {
                             "confidencePath" to confidenceAsset?.get("evidencePath"),
                             "confidenceAvailability" to depth.confidenceAvailability.name,
                             "depthSha256" to depthAsset?.get("sha256"),
+                            "depthEncoding" to if(depth.hasDepth()) depth.depth.encoding else null,
+                            "confidenceEncoding" to if(depth.hasConfidence()) depth.confidence.encoding else null,
                             "confidenceSha256" to confidenceAsset?.get("sha256"),
                             "detail" to depth.detail,
                         )
@@ -171,7 +173,7 @@ object Ingest {
             require(normalized.isNotEmpty()) { "Capture contains no eligible manual keyframes" }
             val input = ReconstructionInput(manifest.projectId, manifestHash, normalized.toList(), excluded.toList(), validation.frames)
             val document = linkedMapOf<String, Any?>(
-                "schema" to 1,
+                "schemaVersion" to 1,
                 "projectId" to input.projectId,
                 "sourceManifestSha256" to input.sourceManifestSha256,
                 "eligibleFrames" to input.frames.size,

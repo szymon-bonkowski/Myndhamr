@@ -1,4 +1,4 @@
-name: v0.0 + v0.1 foundation and capture inspector
+name: v0.0–v0.2 capture and sparse reconstruction
 on:
   push:
   pull_request:

@@ -106,8 +106,8 @@ def _load_config(run_dir: Path) -> dict[str, Any]:
 
 def _validate_inputs(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     input_doc = _read_json(run_dir / "input.json", "normalized input")
-    if not isinstance(input_doc, dict) or input_doc.get("version") != 1:
-        raise WorkerError("input.json must be an object with version 1")
+    if not isinstance(input_doc, dict) or input_doc.get("schemaVersion") != 1:
+        raise WorkerError("input.json must be an object with schemaVersion 1")
     raw_images = input_doc.get("images")
     if not isinstance(raw_images, list) or len(raw_images) < 2:
         raise WorkerError("input.json images must contain at least two eligible images")

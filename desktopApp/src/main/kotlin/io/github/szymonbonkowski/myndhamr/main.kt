@@ -11,11 +11,14 @@ import java.math.BigInteger
 import java.math.MathContext
 import java.nio.file.Files
 import java.util.Locale
+import io.github.szymonbonkowski.myndhamr.reconstruction.SparseCommand
 
 private const val HELP = """Usage: myndhamr [--help]
        myndhamr inspect <project-directory|package.scan3d>
        myndhamr replay <project-directory|package.scan3d>
        myndhamr validate <project-directory|package.scan3d>
+       myndhamr ingest <scan> <new-run-directory>
+       myndhamr reconstruct <scan> <new-run-directory> [--python path] [--timeout-seconds 600] [--pose-threshold-meters 0.05]
 
 All commands emit JSON. replay emits one JSON object per stored metadata record.
 """
@@ -43,6 +46,7 @@ fun foundationCommand(args: List<String>): String {
 }
 
 internal fun runCli(args: List<String>, stdout: java.io.PrintStream, stderr: java.io.PrintStream): Int {
+    if (SparseCommand.handles(args.firstOrNull())) return SparseCommand.run(args, stdout, stderr)
     try {
         if (args.isEmpty()) {
             stdout.println("Myndhamr ${FoundationVersion.MILESTONE} foundation")

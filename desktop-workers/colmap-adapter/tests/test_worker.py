@@ -35,7 +35,7 @@ def _run_dir(root: Path, image_names: tuple[str, ...] = ("frame-1.png", "frame-2
             "fx": 60.0, "fy": 60.0, "cx": 32.0, "cy": 24.0,
             "worldFromCameraColumnMajor": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
         })
-    (run_dir / "input.json").write_text(json.dumps({"version": 1, "images": input_images}), encoding="utf-8")
+    (run_dir / "input.json").write_text(json.dumps({"schemaVersion": 1, "images": input_images}), encoding="utf-8")
     (run_dir / "pairs.json").write_text(json.dumps({"pairs": [{
         "first": image_names[0], "second": image_names[1], "reason": "test"
     }]}), encoding="utf-8")
@@ -88,7 +88,7 @@ def _textured_nonplanar_run(run_dir: Path) -> None:
             "worldFromCameraColumnMajor": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
                                            center_x, 0, 0, 1],
         })
-    (run_dir / "input.json").write_text(json.dumps({"version": 1, "images": input_images}), encoding="utf-8")
+    (run_dir / "input.json").write_text(json.dumps({"schemaVersion": 1, "images": input_images}), encoding="utf-8")
     pairs = [{"first": f"view-{a}.png", "second": f"view-{b}.png", "reason": "synthetic-overlap"}
              for a, b in ((0, 1), (1, 2), (0, 2))]
     (run_dir / "pairs.json").write_text(json.dumps(pairs), encoding="utf-8")
@@ -161,6 +161,42 @@ class WorkerProcessTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, result.stdout)
             diag = json.loads((run_dir / "adapter-diagnostics.json").read_text())
             self.assertIn("refusing to overwrite", diag["error"]["message"])
+
+    def test_textureless_images_report_insufficient_overlap(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            run_dir = _run_dir(Path(temp))
+            for path in (run_dir / "images").glob("*.png"):
+                Image.new("RGB", (64, 48), (90, 90, 90)).save(path)
+            result = _invoke(run_dir)
+            self.assertNotEqual(result.returncode, 0)
+            diag = json.loads((run_dir / "adapter-diagnostics.json").read_text())
+            self.assertEqual(diag["status"], "failed")
+            self.assertIn("no registered sparse model", diag["error"]["message"])
+            self.assertEqual(diag["registeredImages"], 0)
+            self.assertEqual(diag["featureExtraction"]["keypointCount"], 0)
+
+    def test_disconnected_matches_preserve_separate_models(self) -> None:
+        import shutil
+        with tempfile.TemporaryDirectory() as temp:
+            run_dir = _run_dir(Path(temp)); _textured_nonplanar_run(run_dir)
+            document = json.loads((run_dir / "input.json").read_text())
+            pairs = json.loads((run_dir / "pairs.json").read_text())
+            originals = list(document["images"])
+            for image in originals:
+                copy = {**image, "name": "other-" + image["name"], "frameId": "other-" + image["frameId"]}
+                shutil.copyfile(run_dir / "images" / image["name"], run_dir / "images" / copy["name"])
+                document["images"].append(copy)
+            pairs += [{**pair, "first": "other-" + pair["first"], "second": "other-" + pair["second"]} for pair in list(pairs)]
+            (run_dir / "input.json").write_text(json.dumps(document))
+            (run_dir / "pairs.json").write_text(json.dumps(pairs))
+            result = _invoke(run_dir)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            diag = json.loads((run_dir / "adapter-diagnostics.json").read_text())
+            self.assertEqual(diag["componentCount"], 2)
+            self.assertEqual(diag["componentSizes"], [3, 3])
+            self.assertEqual(diag["registeredImages"], 3)
+            self.assertEqual(diag["registeredFraction"], .5)
+            self.assertEqual(diag["verifiedGraph"]["componentCount"], 2)
 
     def test_tiny_procedural_nonplanar_scene_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -8,3 +8,4 @@ python3 tools/check-inventory.py
   :androidApp:lintDebug :androidApp:testDebugUnitTest nativeTest verifyProtoGeneration benchmarkSmoke
 python3 tests/tooling/test_proto_generation.py
 ./gradlew --console=plain :desktopApp:run --args=--help
+tools/validate-sparse.sh
