@@ -61,27 +61,36 @@ No raw schema migration. New derived JSON protocol version1, recorded with adapt
 Named validation errors, unsupported codec/model, too few eligible images, no verified overlap/model, partial/disconnected registration, missing priors, rank-deficient alignment, implausible/inconsistent pose/depth evidence, worker nonzero exit/timeout. Emit failure status and diagnostic paths; raw inputs unchanged.
 
 ## Risks and mitigations
-Long scan contains AR world revisions and low-resolution RGB; robust consensus plus separate orientation/depth evidence will expose inconsistency. Capture scene may lack overlap; inspect all31 frames and verified graph without relabeling failed registrations. COLMAP versions differ: pin3.12.6 and inspect actual API. Camera calibration/image pixel semantics remain measured; no untested rotation/crop.
+Long scan contains AR world revisions and low-resolution RGB; robust consensus plus separate orientation/depth evidence will expose inconsistency. Capture scene may lack overlap; inspect all31 frames and verified graph without relabeling failed registrations. COLMAP versions differ: pin3.13.0 and inspect actual API. Camera calibration/image pixel semantics remain measured; no untested rotation/crop.
 
 ## Subagent/model plan
 Coordinator owns geometry contract, numerical implementation, integration and review. SUBAGENT.md/skill authorizes bounded delegation: Luna high implements ingest/pair glue in separate worktree after fixed interfaces; Luna high implements isolated adapter only after explicit protocol/API contract. Sol xhigh reviews numerical and end-to-end correctness. No Astra planned.
 
 ## Progress
 - [x] Baseline inspection/regression and real dataset discovery.
-- [ ] M1 validated ingest/pair graph.
-- [ ] M2 geometry/metric alignment.
-- [ ] M3 sparse worker.
-- [ ] M4 aligned artifacts/depth/inspection.
+- [x] M1 validated ingest/pair graph.
+- [x] M2 geometry/metric alignment.
+- [x] M3 sparse worker.
+- [x] M4 aligned artifacts/depth/inspection.
 - [ ] M5 full acceptance/CI/closure.
 
 ## Decisions made during implementation
-2026-10-01: use pinned pycolmap3.12.6 out of process; native COLMAP owns SfM, Python is adapter/data tooling, Kotlin owns orchestration, C++ owns metric estimation. Prior use is pairing plus robust alignment; covariance-free v1 poses are not hard constraints in BA.
+2026-10-01: use pinned pycolmap3.13.0 out of process; native COLMAP owns SfM, Python is adapter/data tooling, Kotlin owns orchestration, C++ owns metric estimation. Prior use is pairing plus robust alignment; covariance-free v1 poses are not hard constraints in BA.
 
 ## Discoveries
+Review found and fixed target-rank degeneracy (source was checked alone), actual ARCore depth label association (specific documented provider mapping now preserves labels), confidence clock checking, orphaned interrupted/TERM-ignoring workers, and top-level failure diagnostics after successful raw SfM. Negative regression tests cover these failures. Integration schema-key and raw-model-path mismatches were fixed and caught by the complete CLI fixture smoke.
+PyCOLMAP3.12/3.13 does not expose imported-pair matching parameters in verify_matches; pin3.13.0 and record its compiled CPU defaults. Matcher hardware-derived threads are an explicit API limit.
 v0.1 baseline is newer than memory notes and already includes independent CPU/Camera2 source clocks. Real long scan has31 keyframes and documented world revisions; preserve them for diagnosis.
 
 ## Final validation
-Pending milestones; initial tools/validate.sh passed (log build/acceptance/v02-baseline.log).
+- Full current-code tools/validate.sh passed (build/acceptance/v02-full-regression.log): domain37 JVM+37 Android host,scan-format4,project-store16,desktop21,Android17 unit tests; existing shared JVM/Android host tests, build/lint, native foundation/geometry, codegen, inventory and benchmark passed. Worker8 and metric3 Python tests passed; textureless/no-overlap, disconnected models, clock association, invalid data and process failure/interruption/timeout included.
+- Actual end-to-end controlled scene:10/10 registered (100%), one component,4676 points,30116 observations, maximum camera residual0.000769689m; median orientation residual0.0395293412deg (read final diagnostics for exact measured values). Independent raw-depth median scale ratio0.999850400 (0.014960% error), median absolute residual 0.00321455614m. Native exact Sim(3) tests recover known transform within1e-10 relative scale/rotation/translation bounds; noisy/outlier test recovers within injected tolerances. Artifact root build/sparse-acceptance-UYWSkK/run. Native multithreading can change final point counts slightly; no bitwise-SfM determinism claim.
+- Trajectory HTML visually inspected in in-app browser; XY/XZ plane and capture/aligned visibility controls passed. Metrics use common capture-world axes; raw panel separate arbitrary units.
+- Benchmark (Java21.0.11):1k frames0.0452s/14940edges/76092candidate checks;10k0.2538s/154589edges/2035844candidate checks. Edge/candidate budgets asserted, no quadratic all-pairs construction.
+- Real directory and exported package produce identical normalized31-keyframe inputs. All raw source entries compared byte-for-byte with the accepted v0.1 ZIP; no raw edits. Source ZIP SHA25603754391c451f44a60f0054fb82dea3a336a1580ee357dd02e1bb7afb107bb78.
+- Real long default graph:5/31 (16.129%), two sparse components [5,3],110points,360observations; verified graph9components. Broader diagnostic matching across all31 small-scan frames and1.5degree initialization:11/31 (35.484%), components[11,5],371points, verified graph6components [23,3,2,1,1,1]. Default metric alignment fails; diagnostic thresholds0.05/0.1/0.2/0.5m all fail60% consensus. No failed frame was excluded. Paths build/acceptance/v02-real-long-run and v02-real-long-expanded.
+- Additional real short capture ingest passes but only2 eligible frames; explicit insufficient-data failure. Other locally available scans have0 keyframes. Documents/final-system-export.scan3d.zip is identical to the already-tested long export. Suitable real reference acceptance remains externally blocked by capture coverage/data consistency; no claim that the capture lifecycle tests prove SfM quality.
+- Remote CI pending after stable push.
 
 ## Outcome
-Pending.
+Implementation and all deterministic/controlled gates are complete. Real-data ingest/failure diagnosis is complete; >95% real reference registration and meaningful real metric validation are NOT passed. Keep this plan active until suitable existing/new physical capture evidence passes the unchanged gate. Do not move to completed or label v0.2 complete merely because the software/controlled fixture works. Independent cleanup, stable commits/push and remote CI are being completed.
