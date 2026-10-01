@@ -1,13 +1,13 @@
 package io.github.szymonbonkowski.myndhamr
 
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
+import io.github.szymonbonkowski.myndhamr.domain.FoundationVersion
 
-fun main() = application {
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "Myndhamr",
-    ) {
-        App()
-    }
+fun main(args: Array<String>) {
+    println(foundationCommand(args.toList()))
+}
+
+fun foundationCommand(args: List<String>): String = when (args) {
+    emptyList<String>() -> "Myndhamr ${FoundationVersion.MILESTONE} foundation"
+    listOf("--help") -> "Usage: myndhamr [--help]"
+    else -> throw IllegalArgumentException("Invalid arguments: ${args.joinToString(" ")}")
 }
