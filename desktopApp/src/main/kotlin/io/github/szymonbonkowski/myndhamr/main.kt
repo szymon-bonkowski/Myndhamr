@@ -21,29 +21,59 @@ All commands emit JSON. replay emits one JSON object per stored metadata record.
 private const val MAX_DIAGNOSTIC_KEYS = 64
 
 fun main(args: Array<String>) {
-    try {
-        val output = foundationCommand(args.toList())
-        if (output.isNotEmpty()) println(output)
-    } catch (e: Exception) {
-        System.err.println(json(mapOf("error" to (e.message ?: e.javaClass.simpleName))))
-        System.exit(2)
-    }
+    val status = runCli(args.toList(), System.out, System.err)
+    if (status != 0) System.exit(status)
 }
 
-/** Kept as a public pure function for the v0.0 CLI compatibility checks. */
+/** Kept as a public function for the v0.0 CLI compatibility checks. */
 fun foundationCommand(args: List<String>): String {
     if (args.isEmpty()) return "Myndhamr ${FoundationVersion.MILESTONE} foundation"
-    if (args == listOf("--help")) return HELP.trimEnd()
+    if (args == listOf("--help")) return "Usage: myndhamr [--help]"
     require(args.size == 2 && args[0] in setOf("inspect", "replay", "validate")) { "Invalid arguments: ${args.joinToString(" ")}" }
     val command = args[0]
     withProject(args[1]) { root ->
         when (command) {
             "validate" -> println(json(reportJson(CaptureProject.validate(root))))
             "inspect" -> println(json(Inspector.inspect(root)))
-            "replay" -> replay(root)
+            "replay" -> replay(root, ::println)
         }
     }
     return ""
+}
+
+internal fun runCli(args: List<String>, stdout: java.io.PrintStream, stderr: java.io.PrintStream): Int {
+    try {
+        if (args.isEmpty()) {
+            stdout.println("Myndhamr ${FoundationVersion.MILESTONE} foundation")
+            return 0
+        }
+        if (args == listOf("--help")) {
+            stdout.println(HELP.trimEnd())
+            return 0
+        }
+        require(args.size == 2 && args[0] in setOf("inspect", "replay", "validate")) {
+            "Invalid arguments: ${args.joinToString(" ")}"
+        }
+        return withProject(args[1]) { root ->
+            when (args[0]) {
+                "validate" -> {
+                    val report = CaptureProject.validate(root)
+                    stdout.println(json(reportJson(report)))
+                    if (report.valid) 0 else 1
+                }
+                "inspect" -> {
+                    val result = Inspector.inspect(root)
+                    stdout.println(json(result))
+                    if (result["valid"] == true) 0 else 1
+                }
+                "replay" -> if (replay(root) { stdout.println(it) }) 0 else 1
+                else -> error("Unsupported command")
+            }
+        }
+    } catch (e: Exception) {
+        stderr.println(json(mapOf("error" to (e.message ?: e.javaClass.simpleName))))
+        return 2
+    }
 }
 
 private inline fun <T> withProject(path: String, block: (File) -> T): T {
@@ -61,11 +91,17 @@ private inline fun <T> withProject(path: String, block: (File) -> T): T {
     }
 }
 
-private fun replay(root: File) {
-    CaptureProject.visitFrames(root) { println(json(mapOf("record" to "frame", "value" to frameJson(it)))) }
-    CaptureProject.visitImu(root) { println(json(mapOf("record" to "imu", "value" to imuJson(it)))) }
-    CaptureProject.visitCamera(root) { println(json(mapOf("record" to "camera", "value" to cameraJson(it)))) }
-    CaptureProject.visitEvents(root) { println(json(mapOf("record" to "event", "value" to eventJson(it)))) }
+private fun replay(root: File, emit: (String) -> Unit): Boolean {
+    val report = CaptureProject.validate(root)
+    if (!report.valid) {
+        emit(json(reportJson(report)))
+        return false
+    }
+    CaptureProject.visitFrames(root) { emit(json(mapOf("record" to "frame", "value" to frameJson(it)))) }
+    CaptureProject.visitImu(root) { emit(json(mapOf("record" to "imu", "value" to imuJson(it)))) }
+    CaptureProject.visitCamera(root) { emit(json(mapOf("record" to "camera", "value" to cameraJson(it)))) }
+    CaptureProject.visitEvents(root) { emit(json(mapOf("record" to "event", "value" to eventJson(it)))) }
+    return true
 }
 
 private object Inspector {
@@ -79,15 +115,18 @@ private object Inspector {
         val pose = linkedMapOf<String, Any?>()
         val timestampOrder = linkedMapOf<String, Order>()
         var omittedClockDomains = 0L
-        val arAndroid = DeltaStats()
+        val arMinusCameraByClockPair = linkedMapOf<String, DeltaStats>()
+        var omittedArCameraClockPairs = 0L
         val imageCamera = DeltaStats()
-        var arCameraChecked = 0L
-        var arCameraExact = 0L
         var embeddedCameraChecked = 0L
         var embeddedCameraExact = 0L
-        val depthAge = linkedMapOf<String, DeltaStats>()
-        val unverifiedDepthAges = linkedMapOf<String, Long>()
-        val depthTimestampUse = mutableMapOf<String, Long>()
+        var embeddedCameraMismatch = 0L
+        var embeddedCameraUnverified = 0L
+        var missingEmbeddedCamera = 0L
+        val depthObservedDeltaByClockPair = linkedMapOf<String, DeltaStats>()
+        var omittedDepthClockPairs = 0L
+        val previousDepthTimestampBySource = mutableMapOf<DepthSource, Timestamp>()
+        var reusedDepthTimestampObservations = 0L
         var unverifiedImageCameraClocks = 0L
         var frameCount = 0L
         var keyframes = 0L
@@ -111,16 +150,15 @@ private object Inspector {
                 depth.bump(key)
                 if (d.hasConfidence()) confidence.bump(d.source.name)
                 if (d.availability == DepthAvailability.AVAILABLE && d.hasTimestamp()) {
-                    if (frame.arTimestamp.clockDomain == d.timestamp.clockDomain) {
-                        val age = BigInteger.valueOf(frame.arTimestamp.valueNs).subtract(BigInteger.valueOf(d.timestamp.valueNs))
-                        depthAge.getOrPut(d.source.name) { DeltaStats() }.add(age)
+                    val deltaKey = "${frame.arTimestamp.clockDomain}->${d.timestamp.clockDomain}:${d.source.name}"
+                    if (deltaKey in depthObservedDeltaByClockPair || depthObservedDeltaByClockPair.size < MAX_DIAGNOSTIC_KEYS) {
+                        depthObservedDeltaByClockPair.getOrPut(deltaKey) { DeltaStats() }
+                            .add(BigInteger.valueOf(d.timestamp.valueNs).subtract(BigInteger.valueOf(frame.arTimestamp.valueNs)))
                     } else {
-                        unverifiedDepthAges[d.source.name] = (unverifiedDepthAges[d.source.name] ?: 0L) + 1L
+                        omittedDepthClockPairs++
                     }
-                    val reuseKey = "${d.source.name}:${d.timestamp.clockDomain}:${d.timestamp.valueNs}"
-                    if (reuseKey in depthTimestampUse || depthTimestampUse.size < MAX_DIAGNOSTIC_KEYS) {
-                        depthTimestampUse[reuseKey] = (depthTimestampUse[reuseKey] ?: 0L) + 1L
-                    }
+                    val previous = previousDepthTimestampBySource.put(d.source, d.timestamp)
+                    if (previous != null && sameSourceTime(previous, d.timestamp)) reusedDepthTimestampObservations++
                 }
             }
             if (!intrinsics.containsKey("rgb")) intrinsics["rgb"] = intrinsicsJson(frame.intrinsics)
@@ -139,24 +177,26 @@ private object Inspector {
                         unverifiedKeyframeClocks++
                     }
                 }
-                if (frame.hasCameraTimestamp() && frame.arTimestamp.clockDomain == frame.cameraTimestamp.clockDomain) {
-                    arCameraChecked++
-                    if (sameSourceTime(frame.arTimestamp, frame.cameraTimestamp)) arCameraExact++
-                }
-                if (frame.hasCamera()) {
-                    if (frame.hasCameraTimestamp() && frame.camera.timestamp.clockDomain == frame.cameraTimestamp.clockDomain) {
-                        embeddedCameraChecked++
-                        val embeddedExact = sameSourceTime(frame.camera.timestamp, frame.cameraTimestamp) && frame.camera.frameNumber >= 0
-                        if (embeddedExact) embeddedCameraExact++
-                    }
-                }
                 if (exact) exactKeyframes++
             }
-            if (frame.hasCameraTimestamp() && isAndroidMonotonic(
-                    frame.cameraTimestamp.clockDomain,
-                    if (frame.hasCamera()) frame.camera.timestampSource else ""
-                )) {
-                arAndroid.add(delta(frame.arTimestamp, frame.cameraTimestamp))
+            if (frame.hasCamera() && frame.hasCameraTimestamp()) {
+                if (frame.camera.timestamp.clockDomain == frame.cameraTimestamp.clockDomain) {
+                    embeddedCameraChecked++
+                    if (sameSourceTime(frame.camera.timestamp, frame.cameraTimestamp) && frame.camera.frameNumber >= 0) embeddedCameraExact++
+                    else embeddedCameraMismatch++
+                } else {
+                    embeddedCameraUnverified++
+                }
+            } else {
+                missingEmbeddedCamera++
+            }
+            if (frame.hasCameraTimestamp()) {
+                val pair = "${frame.arTimestamp.clockDomain}->${frame.cameraTimestamp.clockDomain}"
+                if (pair in arMinusCameraByClockPair || arMinusCameraByClockPair.size < MAX_DIAGNOSTIC_KEYS) {
+                    arMinusCameraByClockPair.getOrPut(pair) { DeltaStats() }.add(delta(frame.arTimestamp, frame.cameraTimestamp))
+                } else {
+                    omittedArCameraClockPairs++
+                }
             }
             val calibrationProblem = frame.intrinsics.fx <= 0.0 || frame.intrinsics.fy <= 0.0 ||
                 frame.intrinsics.width == 0 || frame.intrinsics.height == 0 || frame.intrinsics.model.isBlank() ||
@@ -176,20 +216,27 @@ private object Inspector {
             val key = "${sample.type}:${sample.timestamp.clockDomain}"
             if (!order(imuOrders, key, sample.timestamp.valueNs)) omittedClockDomains++
             if (key in imuByClock || imuByClock.size < MAX_DIAGNOSTIC_KEYS) imuByClock.getOrPut(key) { SampleSpan() }.add(sample.timestamp.valueNs)
-            if (isAndroidMonotonic(sample.timestamp.clockDomain)) {
+            if (isExplicitRealtimeLatencyDomain(sample.timestamp.clockDomain)) {
                 imuLatency.add(BigInteger.valueOf(sample.timestamp.arrivalElapsedNs).subtract(BigInteger.valueOf(sample.timestamp.valueNs)))
             } else {
                 unverifiedImuLatencies++
             }
         }
         val cameraOrders = linkedMapOf<String, Order>()
+        val cameraCallbackLatency = DeltaStats()
+        var unverifiedCameraCallbackLatencies = 0L
         CaptureProject.visitCamera(root) { camera ->
             if (!order(cameraOrders, camera.timestamp.clockDomain, camera.timestamp.valueNs)) omittedClockDomains++
+            if (isExplicitRealtimeLatencyDomain(camera.timestamp.clockDomain, camera.timestampSource)) {
+                cameraCallbackLatency.add(BigInteger.valueOf(camera.timestamp.arrivalElapsedNs)
+                    .subtract(BigInteger.valueOf(camera.timestamp.valueNs)))
+            } else {
+                unverifiedCameraCallbackLatencies++
+            }
         }
         val eventCounts = linkedMapOf<String, Long>()
         CaptureProject.visitEvents(root) { eventCounts.bump(it.type) }
 
-        val repeatedDepth = depthTimestampUse.values.sumOf { if (it > 1) it - 1 else 0L }
         return linkedMapOf(
             "valid" to report.valid,
             "manifest" to manifest?.let(::manifestJson),
@@ -198,14 +245,21 @@ private object Inspector {
                 "cameraObservations" to report.cameraObservations, "events" to report.events),
             "tracking" to tracking,
             "depth" to linkedMapOf("availabilityBySource" to depth, "confidenceAssetsBySource" to confidence,
-                "ageNsBySource" to depthAge.mapValues { it.value.json() }, "unverifiedAgeClockPairsBySource" to unverifiedDepthAges,
-                "reusedTimestampObservations" to repeatedDepth),
+                "observedDepthMinusArNsByClockPair" to depthObservedDeltaByClockPair.mapValues { (_, stats) ->
+                    linkedMapOf("mapping" to "unverified", "deltaNs" to stats.json())
+                }, "omittedClockPairs" to omittedDepthClockPairs,
+                "reusedTimestampObservations" to reusedDepthTimestampObservations),
             "keyframeAssociations" to linkedMapOf("checked" to checkedKeyframes, "exact" to exactKeyframes,
                 "mismatches" to checkedKeyframes - exactKeyframes,
                 "unverifiedClockKeyframes" to unverifiedKeyframeClocks,
-                "arCameraSameClockChecked" to arCameraChecked, "arCameraExact" to arCameraExact,
-                "embeddedCameraChecked" to embeddedCameraChecked, "embeddedCameraExact" to embeddedCameraExact,
-                "camera2ArOffsetNs" to arAndroid.json(), "cpuImageMinusCameraNs" to imageCamera.json(),
+                "embeddedCameraCheckedAllFrames" to embeddedCameraChecked, "embeddedCameraExactAllFrames" to embeddedCameraExact,
+                "embeddedCameraMismatchesAllFrames" to embeddedCameraMismatch,
+                "embeddedCameraUnverifiedAllFrames" to embeddedCameraUnverified,
+                "missingEmbeddedCameraFrames" to missingEmbeddedCamera,
+                "arMinusCameraObservedNsByClockPair" to arMinusCameraByClockPair.mapValues { (_, stats) ->
+                    linkedMapOf("mapping" to "unverified", "deltaNs" to stats.json())
+                }, "omittedArCameraClockPairs" to omittedArCameraClockPairs,
+                "cpuImageMinusCameraNs" to imageCamera.json(),
                 "unverifiedImageCameraClockPairs" to unverifiedImageCameraClocks),
             "calibration" to linkedMapOf("representativeIntrinsics" to intrinsics,
                 "finitePositiveDimensionFailures" to calibrationErrors, "representativePose" to pose),
@@ -216,6 +270,8 @@ private object Inspector {
                 "rateHzByTypeAndClock" to imuByClock.mapValues { it.value.rateHz() },
                 "maximumGapNs" to report.maximumImuGapNs, "callbackLatencyNs" to imuLatency.json(),
                 "unverifiedCallbackLatencySamples" to unverifiedImuLatencies),
+            "cameraTiming" to linkedMapOf("callbackLatencyNs" to cameraCallbackLatency.json(),
+                "unverifiedCallbackLatencySamples" to unverifiedCameraCallbackLatencies),
             "eventsByType" to eventCounts,
             "validation" to reportJson(report)
         )
@@ -243,9 +299,16 @@ private class DeltaStats {
 }
 
 private class Order {
-    var count = 0L; var first = 0L; var last = 0L; var regressions = 0L
-    fun add(value: Long) { if (count == 0L) first = value else if (value < last) regressions++; last = value; count++ }
-    fun json() = mapOf("count" to count, "regressions" to regressions,
+    var count = 0L; var first = 0L; var last = 0L; var regressions = 0L; var consecutiveDuplicates = 0L
+    fun add(value: Long) {
+        if (count == 0L) first = value
+        else when {
+            value < last -> regressions++
+            value == last -> consecutiveDuplicates++
+        }
+        last = value; count++
+    }
+    fun json() = mapOf("count" to count, "regressions" to regressions, "consecutiveDuplicates" to consecutiveDuplicates,
         "firstNs" to first.toString(), "lastNs" to last.toString())
 }
 
@@ -269,10 +332,11 @@ private fun MutableMap<String, Long>.bump(key: String) {
     this[key] = (this[key] ?: 0) + 1
 }
 private fun sameSourceTime(a: Timestamp, b: Timestamp) = a.valueNs == b.valueNs && a.clockDomain == b.clockDomain
-private fun isAndroidMonotonic(domain: String, timestampSource: String = ""): Boolean {
-    val normalized = domain.lowercase(Locale.ROOT)
-    return normalized.contains("android") || normalized.contains("elapsedrealtime") ||
-        (normalized.contains("camera2") && normalized.contains("realtime")) || timestampSource.equals("REALTIME", ignoreCase = true)
+private fun isExplicitRealtimeLatencyDomain(domain: String, timestampSource: String = ""): Boolean {
+    val clockDomain = domain.uppercase(Locale.ROOT)
+    val source = timestampSource.uppercase(Locale.ROOT)
+    val explicitlyRealtimeDomains = setOf("ANDROID_ELAPSED_REALTIME", "CAMERA_REALTIME", "APPLICATION_ELAPSED")
+    return clockDomain in explicitlyRealtimeDomains || source == "CAMERA_REALTIME"
 }
 private fun delta(a: Timestamp, b: Timestamp) = BigInteger.valueOf(a.valueNs).subtract(BigInteger.valueOf(b.valueNs))
 private fun intrinsicsJson(i: Intrinsics) = mapOf("fx" to i.fx, "fy" to i.fy, "cx" to i.cx, "cy" to i.cy,

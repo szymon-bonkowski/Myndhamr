@@ -13,7 +13,7 @@ class FoundationCommandTest {
 
     @Test
     fun helpPrintsUsage() {
-        assertTrue(foundationCommand(listOf("--help")).contains("myndhamr inspect"))
+        assertEquals("Usage: myndhamr [--help]", foundationCommand(listOf("--help")))
     }
 
     @Test
