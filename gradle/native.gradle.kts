@@ -12,6 +12,8 @@ val nativeBuild = tasks.register<Exec>("nativeBuild") {
     outputs.files(nativeBuildDir.map { it.file("libmyndhamr_jni.so") },
         nativeBuildDir.map { it.file("myndhamr_native_tests") },
         nativeBuildDir.map { it.file("myndhamr_benchmark") },
+        nativeBuildDir.map { it.file("myndhamr_align") },
+        nativeBuildDir.map { it.file("myndhamr_geometry_tests") },
         nativeBuildDir.map { it.file("_deps/protobuf-build/protoc") })
     commandLine("cmake", "--build", nativeBuildDir.get().asFile.absolutePath, "--parallel", "4")
 }

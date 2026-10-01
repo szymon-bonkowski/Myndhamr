@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 
 
-KNOWN_LICENSES = {"Apache-2.0", "BSD-3-Clause", "EPL-1.0", "MIT", "N/A"}
+KNOWN_LICENSES = {"Apache-2.0", "BSD-3-Clause", "EPL-1.0", "MIT", "MPL-2.0", "MIT-CMU", "N/A"}
 COPYLEFT_LICENSES = {
     "AGPL-3.0",
     "GPL-2.0",
@@ -87,7 +87,7 @@ def check_additional(root: Path, rows: list[dict]) -> list[str]:
     native_config = native_config_path.read_text(encoding="utf-8")
 
     native_pins: dict[str, str] = {}
-    for name in ("PROTOBUF", "ABSEIL"):
+    for name in ("PROTOBUF", "ABSEIL", "EIGEN"):
         match = re.search(rf"set\(MYNDHAMR_{name}_VERSION ([^)]+)\)", native_config)
         if not match:
             errors.append(f"native/dependencies.cmake lacks MYNDHAMR_{name}_VERSION")
@@ -120,6 +120,9 @@ def check_additional(root: Path, rows: list[dict]) -> list[str]:
             match = re.search(r"cmake_minimum_required\(VERSION ([^)]+)\)", cmake)
             if not match or row.get("version") != f">={match.group(1)}":
                 errors.append("CMake minimum does not match native/CMakeLists.txt")
+        elif name == "Eigen desktop geometry":
+            if row.get("version") != native_pins.get("EIGEN"):
+                errors.append(f"{name} version does not match native Eigen pin")
         elif name == "Abseil C++":
             if row.get("version") != native_pins.get("ABSEIL"):
                 errors.append(f"{name} version does not match native Abseil pin")

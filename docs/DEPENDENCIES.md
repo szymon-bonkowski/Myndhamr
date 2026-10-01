@@ -19,3 +19,9 @@ The foundation's main declared licenses are permissive, but that is not a claim 
 ```
 
 Review native FetchContent contents and Android/iOS platform dependencies separately; the checker intentionally does not resolve transitive artifacts or infer licenses from artifact coordinates.
+
+## v0.2 desktop dependencies
+
+Desktop geometry adds SHA-256-pinned Eigen3.4.0. Only stock Core/SVD headers are used, with EIGEN_MPL2_ONLY; no Eigen files are modified and no LGPL-only Eigen components are enabled. MPL-2.0 is file-level copyleft and permits combination with the proprietary application; preserve its source/license/notices when redistributing the headers or relevant binaries. It is audited here as a specific compatible dependency, not treated as a permissive license.
+
+The process adapter pins pycolmap3.13.0 (COLMAP BSD-3-Clause), NumPy2.4.6 (BSD-3-Clause) and Pillow11.3.0 (MIT-CMU). Pillow validates images and renders development fixtures. These are separately installed worker dependencies, not Android dependencies. COLMAP's own license explicitly distinguishes its dependencies; prebuilt wheel contents and transitive-library notices require a distribution audit before bundling a release. No release or redistributed worker bundle is created by this milestone. License sources are recorded in dependency-inventory.json and ADR-0003.

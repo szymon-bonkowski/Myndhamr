@@ -295,6 +295,46 @@
       "scope": "toolchain",
       "status": "used",
       "source": "Android native build configuration"
+    },
+    {
+      "name": "Eigen desktop geometry",
+      "coordinate": "Eigen",
+      "version": "3.4.0",
+      "license": "MPL-2.0",
+      "scope": "production",
+      "status": "used",
+      "source": "native/dependencies.cmake",
+      "license_url": "https://gitlab.com/libeigen/eigen/-/blob/3.4.0/COPYING.MPL2",
+      "notes": "Header-only stock SVD/Core with EIGEN_MPL2_ONLY. No modified Eigen files. MPL file-level requirements and notices must accompany redistribution."
+    },
+    {
+      "name": "COLMAP Python adapter",
+      "coordinate": "pycolmap",
+      "version": "3.13.0",
+      "license": "BSD-3-Clause",
+      "scope": "production",
+      "status": "used",
+      "source": "desktop-workers/colmap-adapter/requirements.txt",
+      "license_url": "https://github.com/colmap/colmap/blob/3.13.0/COPYING.txt"
+    },
+    {
+      "name": "NumPy adapter arrays",
+      "coordinate": "numpy",
+      "version": "2.4.6",
+      "license": "BSD-3-Clause",
+      "scope": "production",
+      "status": "used",
+      "source": "desktop-workers/colmap-adapter/requirements.txt"
+    },
+    {
+      "name": "Pillow image validation and fixture renderer",
+      "coordinate": "pillow",
+      "version": "11.3.0",
+      "license": "MIT-CMU",
+      "scope": "production",
+      "status": "used",
+      "source": "desktop-workers/colmap-adapter/requirements.txt",
+      "license_url": "https://github.com/python-pillow/Pillow/blob/11.3.0/LICENSE"
     }
   ],
   "license_policy": {
@@ -303,7 +343,9 @@
       "BSD-3-Clause",
       "EPL-1.0",
       "MIT",
-      "N/A"
+      "N/A",
+      "MPL-2.0",
+      "MIT-CMU"
     ],
     "copyleft_licenses": [
       "AGPL-3.0",
