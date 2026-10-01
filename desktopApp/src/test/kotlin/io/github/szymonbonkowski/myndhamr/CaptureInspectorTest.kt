@@ -76,6 +76,41 @@ class CaptureInspectorTest {
     }
 
     @Test
+    fun providerAssociationReportsClockDifferenceWithoutClaimingClockEquality() {
+        val parent=Files.createTempDirectory("myndhamr-provider-image-").toFile()
+        try {
+            val root=File(parent,"scan")
+            CaptureProject.create(root,manifest("provider")).use { writer ->
+                val cameraTime=timestamp(137848998457227,"CAMERA_REALTIME")
+                val rgb=writer.writeAsset("assets/rgb/1.i420",ByteArray(6),"i420")
+                writer.appendFrame(CaptureFrame.newBuilder().setFrameId(1).setArTimestamp(timestamp(137849012417062,"ARCORE_FRAME"))
+                    .setCameraTimestamp(cameraTime).setCamera(CameraObservation.newBuilder().setTimestamp(cameraTime).setFrameNumber(7).setTimestampSource("REALTIME"))
+                    .setImageTimestamp(timestamp(137849012053824,"ARCORE_CPU_IMAGE")).setImageAssociation(CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE)
+                    .setTrackingState(TrackingState.TRACKING).setPose(pose()).setIntrinsics(intrinsics(2,2))
+                    .setKeyframe(true).setRgb(rgb).setImageWidth(2).setImageHeight(2).setImageFormat("YUV_420_888")
+                    .addDepth(DepthRecord.newBuilder().setSource(DepthSource.ARCORE_RAW).setAvailability(DepthAvailability.UNSUPPORTED)).build())
+                writer.finish(200,CaptureState.COMPLETED)
+            }
+            val archive=File(parent,"provider.scan3d");CaptureProject.export(root,archive)
+            val imported=File(parent,"imported");CaptureProject.importPackage(archive,imported)
+            val result=inspectProject(imported)
+            assertTrue(result["valid"] as Boolean)
+            val associations=result["keyframeAssociations"] as Map<*,*>
+            assertEquals(1L,associations["providerLinkedCurrentFrameKeyframes"])
+            assertEquals(0L,associations["exact"])
+            assertEquals(0L,associations["mismatches"])
+            assertEquals(1L,associations["unverifiedClockKeyframes"])
+            assertEquals(1L,associations["embeddedCameraExactAllFrames"])
+            val pairs=associations["cpuImageMinusCameraObservedNsByClockPair"] as Map<*,*>
+            val observation=pairs["ARCORE_CPU_IMAGE->CAMERA_REALTIME"] as Map<*,*>
+            assertEquals("unverified",observation["mapping"])
+            assertEquals("13596597",(observation["deltaNs"] as Map<*,*>)["minNs"])
+            val replay=captureStdout { foundationCommand(listOf("replay",archive.path)) }
+            assertTrue(replay.contains(CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE))
+        } finally { parent.deleteRecursively() }
+    }
+
+    @Test
     fun reportsNonKeyframeCameraMetadataMismatchWithoutCallingTimingInvalid() {
         val parent = Files.createTempDirectory("myndhamr-inspector-corrupt-").toFile()
         try {

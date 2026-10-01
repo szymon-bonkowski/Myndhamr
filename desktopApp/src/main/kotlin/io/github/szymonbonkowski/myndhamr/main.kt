@@ -1,6 +1,7 @@
 package io.github.szymonbonkowski.myndhamr
 
 import io.github.szymonbonkowski.myndhamr.domain.FoundationVersion
+import io.github.szymonbonkowski.myndhamr.store.CaptureValidation
 import io.github.szymonbonkowski.myndhamr.store.CaptureProject
 import io.github.szymonbonkowski.myndhamr.store.ValidationReport
 import io.github.szymonbonkowski.myndhamr.scan.v1.*
@@ -120,6 +121,9 @@ private object Inspector {
         val arMinusCameraByClockPair = linkedMapOf<String, DeltaStats>()
         var omittedArCameraClockPairs = 0L
         val imageCamera = DeltaStats()
+        val imageCameraObservedByClockPair = linkedMapOf<String, DeltaStats>()
+        var omittedImageCameraClockPairs = 0L
+        var providerLinkedKeyframes = 0L
         var embeddedCameraChecked = 0L
         var embeddedCameraExact = 0L
         var embeddedCameraMismatch = 0L
@@ -146,6 +150,10 @@ private object Inspector {
             if (frame.hasCameraTimestamp() && frame.hasImageTimestamp()) {
                 if (frame.imageTimestamp.clockDomain == frame.cameraTimestamp.clockDomain) imageCamera.add(delta(frame.imageTimestamp, frame.cameraTimestamp))
                 else unverifiedImageCameraClocks++
+                val pair="${frame.imageTimestamp.clockDomain}->${frame.cameraTimestamp.clockDomain}"
+                if(pair in imageCameraObservedByClockPair || imageCameraObservedByClockPair.size < MAX_DIAGNOSTIC_KEYS) {
+                    imageCameraObservedByClockPair.getOrPut(pair) { DeltaStats() }.add(delta(frame.imageTimestamp,frame.cameraTimestamp))
+                } else omittedImageCameraClockPairs++
             }
             frame.depthList.forEach { d ->
                 val key = "${d.source.name}:${d.availability.name}"
@@ -172,6 +180,7 @@ private object Inspector {
             }
             if (frame.keyframe) {
                 keyframes++
+                if(frame.imageAssociation==CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE) providerLinkedKeyframes++
                 var exact = false
                 if (frame.hasCameraTimestamp() && frame.hasImageTimestamp()) {
                     if (frame.imageTimestamp.clockDomain == frame.cameraTimestamp.clockDomain) {
@@ -257,6 +266,7 @@ private object Inspector {
             "keyframeAssociations" to linkedMapOf("checked" to checkedKeyframes, "exact" to exactKeyframes,
                 "mismatches" to checkedKeyframes - exactKeyframes,
                 "unverifiedClockKeyframes" to unverifiedKeyframeClocks,
+                "providerLinkedCurrentFrameKeyframes" to providerLinkedKeyframes,
                 "embeddedCameraCheckedAllFrames" to embeddedCameraChecked, "embeddedCameraExactAllFrames" to embeddedCameraExact,
                 "embeddedCameraMismatchesAllFrames" to embeddedCameraMismatch,
                 "embeddedCameraUnverifiedAllFrames" to embeddedCameraUnverified,
@@ -265,6 +275,9 @@ private object Inspector {
                     linkedMapOf("mapping" to "unverified", "deltaNs" to stats.json())
                 }, "omittedArCameraClockPairs" to omittedArCameraClockPairs,
                 "cpuImageMinusCameraNs" to imageCamera.json(),
+                "cpuImageMinusCameraObservedNsByClockPair" to imageCameraObservedByClockPair.mapValues { (_,stats) ->
+                    linkedMapOf("mapping" to "unverified", "deltaNs" to stats.json())
+                }, "omittedImageCameraClockPairs" to omittedImageCameraClockPairs,
                 "unverifiedImageCameraClockPairs" to unverifiedImageCameraClocks),
             "calibration" to linkedMapOf("representativeIntrinsics" to intrinsics,
                 "finitePositiveDimensionFailures" to calibrationErrors, "representativePose" to pose),
@@ -364,6 +377,7 @@ private fun cameraJson(c: CameraObservation) = mapOf("timestamp" to if (c.hasTim
 private fun frameJson(f: CaptureFrame) = mapOf("frameId" to f.frameId.toString(), "arTimestamp" to timestampJson(f.arTimestamp),
     "cameraTimestamp" to if (f.hasCameraTimestamp()) timestampJson(f.cameraTimestamp) else null,
     "imageTimestamp" to if (f.hasImageTimestamp()) timestampJson(f.imageTimestamp) else null,
+    "imageAssociation" to f.imageAssociation,
     "trackingState" to f.trackingState.name, "poseColumnMajor" to if (f.hasPose()) f.pose.columnMajorList else null,
     "intrinsics" to intrinsicsJson(f.intrinsics), "keyframe" to f.keyframe, "camera" to if (f.hasCamera()) cameraJson(f.camera) else null,
     "depth" to f.depthList.map(::depthJson),

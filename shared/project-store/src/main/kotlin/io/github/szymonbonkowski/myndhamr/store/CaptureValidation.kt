@@ -8,6 +8,8 @@ object CaptureValidation {
     const val POSE_CONVENTION = "T_world_camera;meters;right-handed;+X-right,+Y-up,-Z-forward;column-vectors;column-major"
     const val IMAGE_CONVENTION = "unrotated-cpu-image;+X-right,+Y-down;camera-to-optical=diag(1,-1,-1)"
 
+    const val ARCORE_CURRENT_FRAME_IMAGE = "ARCORE_CURRENT_FRAME_ACQUIRE_CAMERA_IMAGE"
+
     fun manifest(value: CaptureManifest) {
         require(value.formatVersion == 1) { "Unsupported capture format ${value.formatVersion}" }
         require(value.projectId.isNotBlank() && value.startedNs >= 0) { "Invalid project identity/start" }
@@ -50,6 +52,7 @@ object CaptureValidation {
 
     fun frame(value: CaptureFrame) {
         require(value.frameId > 0 && value.hasArTimestamp() && value.hasIntrinsics()) { "Missing frame identity/time/calibration" }
+        require(value.imageAssociation in setOf("", ARCORE_CURRENT_FRAME_IMAGE)) { "Unsupported image association ${value.imageAssociation}" }
         timestamp(value.arTimestamp); intrinsics(value.intrinsics)
         require(value.trackingState != TrackingState.TRACKING_UNSPECIFIED && value.trackingState != TrackingState.UNRECOGNIZED)
         if (value.hasPose()) { require(value.trackingState == TrackingState.TRACKING) { "Pose with invalid tracking" }; pose(value.pose) }
@@ -87,7 +90,12 @@ object CaptureValidation {
             require(value.trackingState == TrackingState.TRACKING && value.hasPose()) { "Keyframe requires valid tracking/pose" }
             require(value.hasCamera()) { "Keyframe lacks exact Camera2 observation" }
             require(value.hasRgb() && value.hasCameraTimestamp() && value.hasImageTimestamp()) { "Keyframe lacks RGB/source timestamps" }
-            require(value.cameraTimestamp.valueNs == value.imageTimestamp.valueNs && value.camera.timestamp.valueNs == value.cameraTimestamp.valueNs && value.cameraTimestamp.clockDomain == value.imageTimestamp.clockDomain && value.camera.timestamp.clockDomain == value.cameraTimestamp.clockDomain) { "Keyframe camera/image association is not exact in one source clock" }
+            require(value.camera.timestamp.valueNs == value.cameraTimestamp.valueNs && value.camera.timestamp.clockDomain == value.cameraTimestamp.clockDomain) { "Keyframe lacks exact Camera2 timestamp association" }
+            when (value.imageAssociation) {
+                "" -> require(value.cameraTimestamp.valueNs == value.imageTimestamp.valueNs && value.cameraTimestamp.clockDomain == value.imageTimestamp.clockDomain) { "Legacy keyframe camera/image association is not exact in one source clock" }
+                ARCORE_CURRENT_FRAME_IMAGE -> require(value.arTimestamp.clockDomain == "ARCORE_FRAME" && value.imageTimestamp.clockDomain == "ARCORE_CPU_IMAGE") { "ARCore provider image association requires original ARCore clock domains" }
+                else -> error("Unsupported image association ${value.imageAssociation}")
+            }
             if (value.rgb.encoding.equals("i420", ignoreCase = true)) {
                 val width = value.imageWidth.toLong(); val height = value.imageHeight.toLong()
                 require(value.rgb.size == width * height + 2 * ((width + 1) / 2) * ((height + 1) / 2)) { "I420 byte size/dimensions mismatch" }

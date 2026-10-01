@@ -96,7 +96,7 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
         }
     }
     fun markKeyframe() {
-        if(accepting.get()) { keyframe.set(true); event("MANUAL_KEYFRAME_REQUEST","Will capture next tracked frame with exact Camera2 metadata and CPU image timestamp") }
+        if(accepting.get()) { keyframe.set(true); event("MANUAL_KEYFRAME_REQUEST","Will capture next tracked frame with exact Camera2 metadata and current-frame CPU image") }
     }
     private fun intrinsics(camera:com.google.ar.core.Camera):Intrinsics {
         return intrinsics(camera.imageIntrinsics,"ARCORE_CPU_IMAGE_PINHOLE;unrotated-pixels")
@@ -138,11 +138,16 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
         if(keyframe.get() && camera.trackingState==com.google.ar.core.TrackingState.TRACKING && observation!=null) {
             try {
                 frame.acquireCameraImage().use { image ->
-                    if(image.timestamp==frame.androidCameraTimestamp) {
+                    // Acquired synchronously before Session.update can advance. ARCore guarantees
+                    // this image belongs to the current Frame, not equal source-clock values.
+                    check(image.width==i.width && image.height==i.height && image.format==android.graphics.ImageFormat.YUV_420_888 && image.cropRect==android.graphics.Rect(0,0,image.width,image.height)) { "CPU image/calibration or crop mismatch" }
+                    run {
                         assets+=PendingAsset("assets/rgb/${b.frameId}.i420",ImagePacking.yuv(image),"i420")
-                        b.imageTimestamp=sourceTime(image.timestamp,e.clockDomain); b.keyframe=true; selected=true
+                        b.imageTimestamp=sourceTime(image.timestamp,"ARCORE_CPU_IMAGE")
+                        b.imageAssociation=CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE
+                        b.keyframe=true; selected=true
                         keyframe.set(false)
-                    } else event("KEYFRAME_IMAGE_ASSOCIATION_REJECTED","image=${image.timestamp};camera=${frame.androidCameraTimestamp}")
+                    }
                 }
             } catch(_:NotYetAvailableException) { event("KEYFRAME_IMAGE_TEMPORARILY_UNAVAILABLE","request retained") }
         }

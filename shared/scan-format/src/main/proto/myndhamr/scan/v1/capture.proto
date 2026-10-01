@@ -107,6 +107,9 @@ message CaptureFrame {
   optional double projection_far_meters = 18;
   string projection_convention = 19;
   optional int32 display_rotation = 20;
+  // Provider guarantee from current Frame.acquireCameraImage(), independent source clocks.
+  // Empty retains the legacy exact same-clock camera/image timestamp contract.
+  string image_association = 21;
 }
 message ImuSample {
   string type = 1;

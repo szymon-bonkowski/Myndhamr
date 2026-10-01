@@ -61,6 +61,34 @@ class CaptureProjectTest {
         assertFalse(report.valid); assertTrue(report.diagnostics.any { "SHA-256" in it })
     }
 
+    @Test fun providerFrameAssociationPreservesIndependentImageClockAndRejectsInventedLinks() {
+        val root = directory()
+        val cameraTime = timestamp(137848998457227).toBuilder().setClockDomain("CAMERA_REALTIME").build()
+        val imageTime = timestamp(137849012053824).toBuilder().setClockDomain("ARCORE_CPU_IMAGE").build()
+        val writer = CaptureProject.create(root, manifest())
+        val rgb = writer.writeAsset("assets/rgb/1.i420", ByteArray(640*480*3/2), "i420")
+        val linked = frame().toBuilder().setArTimestamp(timestamp(137849012417062).toBuilder().setClockDomain("ARCORE_FRAME"))
+            .setKeyframe(true).setRgb(rgb).setCameraTimestamp(cameraTime).setImageTimestamp(imageTime)
+            .setCamera(camera().toBuilder().setTimestamp(cameraTime)).setImageWidth(640).setImageHeight(480).setImageFormat("YUV_420_888")
+            .setImageAssociation(CaptureValidation.ARCORE_CURRENT_FRAME_IMAGE).build()
+        CaptureValidation.frame(linked)
+        assertFails { CaptureValidation.frame(linked.toBuilder().clearImageAssociation().build()) }
+        assertFails { CaptureValidation.frame(linked.toBuilder().setImageAssociation("nearest-timestamp").build()) }
+        assertFails { CaptureValidation.frame(frame().toBuilder().setImageAssociation("nearest-timestamp").build()) }
+        assertFails { CaptureValidation.frame(linked.toBuilder().setImageTimestamp(imageTime.toBuilder().setClockDomain("CAMERA_REALTIME")).build()) }
+        assertFails { CaptureValidation.frame(linked.toBuilder().setArTimestamp(timestamp()).build()) }
+        assertFails { CaptureValidation.frame(linked.toBuilder().setCamera(camera().toBuilder().setTimestamp(cameraTime.toBuilder().setValueNs(cameraTime.valueNs+1))).build()) }
+        writer.appendFrame(linked); writer.finish(200, CaptureState.COMPLETED)
+        val zip = File(directory(), "provider.scan3d")
+        CaptureProject.export(root,zip)
+        val imported = File(directory(), "imported")
+        assertTrue(CaptureProject.importPackage(zip,imported).valid)
+        var restored: CaptureFrame? = null
+        CaptureProject.visitFrames(imported) { restored=it }
+        assertEquals(linked,restored)
+        assertEquals(13_596_597L,restored!!.imageTimestamp.valueNs-restored!!.cameraTimestamp.valueNs)
+    }
+
     @Test fun invalidMeasurementRejectedBeforePersisting() {
         val root = directory(); val writer = CaptureProject.create(root, manifest())
         assertFailsWith<IllegalArgumentException> { writer.appendFrame(frame().toBuilder().setIntrinsics(intrinsics().toBuilder().setFx(Double.NaN)).build()) }
