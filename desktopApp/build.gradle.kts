@@ -13,5 +13,6 @@ application {
 
 dependencies {
     implementation(project(":shared:domain"))
+    implementation(project(":shared:project-store"))
     testImplementation(libs.kotlin.testJunit)
 }

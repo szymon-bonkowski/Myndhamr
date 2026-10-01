@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tools/check-inventory.py
 ./gradlew --console=plain \
-  :shared:jvmTest :shared:testAndroidHostTest :shared:domain:jvmTest :shared:domain:testAndroidHostTest :shared:scan-format:test \
+  :shared:jvmTest :shared:testAndroidHostTest :shared:domain:jvmTest :shared:domain:testAndroidHostTest :shared:scan-format:test :shared:project-store:test \
   :desktopApp:build :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest \
   :androidApp:lintDebug nativeTest verifyProtoGeneration benchmarkSmoke
 python3 tests/tooling/test_proto_generation.py
