@@ -4,6 +4,9 @@ import com.google.protobuf.ByteString
 import com.google.protobuf.UnknownFieldSet
 import io.github.szymonbonkowski.myndhamr.scan.v1.*
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.OutputStream
 import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -171,6 +174,111 @@ class CaptureProjectTest {
         CaptureProject.export(alias, zip)
         assertTrue(CaptureProject.importPackage(zip, File(folder, "imported")).valid)
         assertFalse(File(outside, "secret").exists())
+    }
+
+    @Test fun partialJournalWritePoisonsWriterAndKeepsTailRecoverable() {
+        val root = directory()
+        CaptureProject.create(root, manifest()).use { it.appendFrame(frame()); it.appendImu(imu(101)) }
+        val journal = File(root, CaptureProject.FRAMES)
+        val prefix = journal.readBytes()
+        val closed = mutableListOf<String>()
+        val writer = CaptureWriter(root, manifest(), StoreLimits()) { file ->
+            val stream = FileOutputStream(file, true)
+            var remaining = if (file.name == "frames.pb") 7 else Int.MAX_VALUE
+            val output = object : OutputStream() {
+                override fun write(value: Int) = write(byteArrayOf(value.toByte()), 0, 1)
+                override fun write(bytes: ByteArray, offset: Int, count: Int) {
+                    val accepted = minOf(count, remaining)
+                    stream.write(bytes, offset, accepted)
+                    remaining -= accepted
+                    if (remaining == 0) throw IOException("injected partial journal write")
+                }
+                override fun close() {
+                    closed += file.name
+                    stream.close()
+                    // Closing one handle must never prevent closure of the remaining three.
+                    if (file.name == "frames.pb") throw IOException("injected close failure")
+                }
+            }
+            JournalHandle(output) { stream.fd.sync() }
+        }
+        val firstFailure = assertFailsWith<IOException> { writer.appendFrame(frame(2)) }
+        assertEquals("injected partial journal write", firstFailure.message)
+        assertEquals(listOf("injected close failure"), firstFailure.suppressed.map { it.message })
+        assertEquals(CaptureProject.streamPaths.map { File(it).name }, closed)
+        val damaged = journal.readBytes()
+        assertEquals(prefix.size + 7, damaged.size)
+        // Model tasks already admitted to the FIFO when the first append failed.
+        assertFailsWith<IllegalStateException> { writer.appendFrame(frame(3)) }
+        assertFailsWith<IllegalStateException> { writer.appendImu(imu(102)) }
+        assertFailsWith<IllegalStateException> { writer.appendCamera(camera()) }
+        assertFailsWith<IllegalStateException> { writer.appendEvent(SessionEvent.newBuilder().setType("FINAL").setTimestamp(timestamp()).build()) }
+        assertFailsWith<IllegalStateException> { writer.writeAsset("assets/after-failure", byteArrayOf(1), "raw") }
+        assertFailsWith<IllegalStateException> { writer.sync() }
+        assertFailsWith<IllegalStateException> { writer.finish(200, CaptureState.FAILED) }
+        writer.close()
+        assertContentEquals(damaged, journal.readBytes())
+        assertEquals(CaptureState.RECORDING, CaptureProject.readManifest(root).state)
+        assertFalse(File(root, "assets/after-failure").exists())
+        CaptureProject.recover(root).use { recovered ->
+            assertContentEquals(prefix, journal.readBytes())
+            assertContentEquals(damaged.copyOfRange(prefix.size, damaged.size), File(root, "recovery").listFiles()!!.single().readBytes())
+            recovered.appendFrame(frame(2))
+            recovered.finish(200, CaptureState.INTERRUPTED)
+        }
+        val report = CaptureProject.validate(root)
+        assertTrue(report.valid, report.diagnostics.joinToString())
+        assertEquals(2L, report.frames)
+        assertEquals(1L, report.imuSamples)
+    }
+
+    @Test fun journalSyncFailureClosesAllHandlesAndRetainsCompletePrefix() {
+        for (duringFinish in listOf(false, true)) {
+            val root = directory(); CaptureProject.create(root, manifest()).close()
+            val closed = mutableListOf<String>()
+            val writer = CaptureWriter(root, manifest(), StoreLimits()) { file ->
+                val stream = FileOutputStream(file, true)
+                val output = object : OutputStream() {
+                    override fun write(value: Int) = stream.write(value)
+                    override fun write(bytes: ByteArray, offset: Int, count: Int) = stream.write(bytes, offset, count)
+                    override fun close() { closed += file.name; stream.close() }
+                }
+                JournalHandle(output) {
+                    if (file.name == "imu.pb") throw IOException("injected journal sync failure")
+                    stream.fd.sync()
+                }
+            }
+            writer.appendFrame(frame()); writer.appendImu(imu(101))
+            assertFailsWith<IOException> { if (duringFinish) writer.finish(200, CaptureState.FAILED) else writer.sync() }
+            assertEquals(CaptureProject.streamPaths.map { File(it).name }, closed)
+            assertFailsWith<IllegalStateException> { writer.appendFrame(frame(2)) }
+            assertFailsWith<IllegalStateException> { writer.finish(200, CaptureState.FAILED) }
+            writer.close()
+            assertEquals(CaptureState.RECORDING, CaptureProject.readManifest(root).state)
+            CaptureProject.recover(root).use { it.finish(200, CaptureState.INTERRUPTED) }
+            val report = CaptureProject.validate(root)
+            assertTrue(report.valid, report.diagnostics.joinToString())
+            assertEquals(1L, report.frames); assertEquals(1L, report.imuSamples)
+        }
+    }
+
+    @Test fun failedJournalInitializationClosesAlreadyOpenedHandles() {
+        val root = directory(); CaptureProject.create(root, manifest()).close()
+        val closed = mutableListOf<String>()
+        assertFailsWith<IOException> {
+            CaptureWriter(root, manifest(), StoreLimits()) { file ->
+                if (file.name == "imu.pb") throw IOException("injected journal open failure")
+                val stream = FileOutputStream(file, true)
+                JournalHandle(object : OutputStream() {
+                    override fun write(value: Int) = stream.write(value)
+                    override fun close() { closed += file.name; stream.close() }
+                }) { stream.fd.sync() }
+            }
+        }
+        assertEquals(listOf("frames.pb"), closed)
+        assertEquals(CaptureState.RECORDING, CaptureProject.readManifest(root).state)
+        CaptureProject.recover(root).use { it.finish(200, CaptureState.INTERRUPTED) }
+        assertTrue(CaptureProject.validate(root).valid)
     }
 
     @Test fun unsupportedVersionAndConventionsAreRejected() {

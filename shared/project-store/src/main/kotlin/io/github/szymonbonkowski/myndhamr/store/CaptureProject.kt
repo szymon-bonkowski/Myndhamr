@@ -240,29 +240,85 @@ object CaptureProject {
     }
 }
 
-class CaptureWriter internal constructor(private val root: File, private val initial: CaptureManifest, private val limits: StoreLimits) : Closeable {
-    private val outputs = CaptureProject.streamPaths.associateWith { FileOutputStream(CaptureProject.safeFile(root, it).also { file -> file.parentFile.mkdirs() }, true) }
+/** A narrow internal seam for deterministic partial-write and sync-failure tests. */
+internal class JournalHandle(val output: OutputStream, val syncToDisk: () -> Unit) : Closeable {
+    override fun close() = output.close()
+}
+
+class CaptureWriter internal constructor(
+    private val root: File,
+    private val initial: CaptureManifest,
+    private val limits: StoreLimits,
+    openJournal: (File) -> JournalHandle = { file ->
+        val stream = FileOutputStream(file, true)
+        JournalHandle(stream) { stream.fd.sync() }
+    },
+) : Closeable {
+    private val outputs = linkedMapOf<String, JournalHandle>()
     private var closed = false
+    private var poisoned: IOException? = null
     private var previousFrameId = 0L
-    init { if (File(root, CaptureProject.FRAMES).length() > 0) CaptureProject.visitFrames(root, limits) { previousFrameId = it.frameId } }
-    private fun append(path: String, value: MessageLite) {
-        check(!closed) { "Capture writer closed" }
-        require(value.serializedSize in 1..limits.maxRecordBytes) { "Record exceeds configured budget" }
-        value.writeDelimitedTo(outputs.getValue(path))
+
+    init {
+        try {
+            CaptureProject.streamPaths.forEach { path ->
+                val file = CaptureProject.safeFile(root, path)
+                require(file.parentFile.mkdirs() || file.parentFile.isDirectory)
+                outputs[path] = openJournal(file)
+            }
+            if (File(root, CaptureProject.FRAMES).length() > 0) CaptureProject.visitFrames(root, limits) { previousFrameId = it.frameId }
+        } catch (failure: Throwable) {
+            closeHandles(failure)
+            throw failure
+        }
     }
-    fun appendFrame(value: CaptureFrame) { CaptureValidation.frame(value); require(value.frameId > previousFrameId) { "Frame ID must increase" }; references(value).forEach { CaptureProject.verifyAsset(root, it) }; append(CaptureProject.FRAMES, value); previousFrameId = value.frameId }
-    fun appendImu(value: ImuSample) { CaptureValidation.imu(value); append(CaptureProject.IMU, value) }
-    fun appendCamera(value: CameraObservation) { CaptureValidation.camera(value); append(CaptureProject.CAMERA, value) }
-    fun appendEvent(value: SessionEvent) { CaptureValidation.event(value); append(CaptureProject.EVENTS, value) }
+
+    private fun writable() {
+        poisoned?.let { throw IllegalStateException("Capture writer has failed; recover the recording project before further writes", it) }
+        check(!closed) { "Capture writer closed" }
+    }
+
+    /** Once a partial append occurs it must remain the final journal tail for prefix recovery. */
+    private fun poison(failure: IOException) {
+        poisoned = failure
+        closeHandles(failure)
+    }
+
+    /** Close every opened handle even if one close fails, preserving the original failure. */
+    private fun closeHandles(primary: Throwable? = null): Throwable? {
+        closed = true
+        var failure = primary
+        outputs.values.forEach { handle ->
+            try { handle.close() } catch (closing: Throwable) {
+                if (failure == null) failure = closing else if (failure !== closing) failure.addSuppressed(closing)
+            }
+        }
+        return failure
+    }
+
+    private fun append(path: String, value: MessageLite) {
+        writable()
+        require(value.serializedSize in 1..limits.maxRecordBytes) { "Record exceeds configured budget" }
+        try { value.writeDelimitedTo(outputs.getValue(path).output) }
+        catch (failure: IOException) { poison(failure); throw failure }
+    }
+    fun appendFrame(value: CaptureFrame) { writable(); CaptureValidation.frame(value); require(value.frameId > previousFrameId) { "Frame ID must increase" }; references(value).forEach { CaptureProject.verifyAsset(root, it) }; append(CaptureProject.FRAMES, value); previousFrameId = value.frameId }
+    fun appendImu(value: ImuSample) { writable(); CaptureValidation.imu(value); append(CaptureProject.IMU, value) }
+    fun appendCamera(value: CameraObservation) { writable(); CaptureValidation.camera(value); append(CaptureProject.CAMERA, value) }
+    fun appendEvent(value: SessionEvent) { writable(); CaptureValidation.event(value); append(CaptureProject.EVENTS, value) }
     fun writeAsset(path: String, bytes: ByteArray, encoding: String): Asset {
-        check(!closed); require(path.startsWith("assets/") && !path.endsWith(".tmp") && encoding.isNotBlank() && bytes.isNotEmpty())
+        writable(); require(path.startsWith("assets/") && !path.endsWith(".tmp") && encoding.isNotBlank() && bytes.isNotEmpty())
         require(!CaptureProject.safeFile(root, path).exists()) { "Raw asset is immutable: $path" }
         CaptureProject.atomicWrite(root, path, bytes)
         return CaptureProject.reference(root, path, encoding)
     }
-    fun sync() { check(!closed); outputs.values.forEach { it.fd.sync() } }
+    fun sync() {
+        writable()
+        try { outputs.values.forEach { it.syncToDisk() } }
+        catch (failure: IOException) { poison(failure); throw failure }
+    }
     fun finish(endNs: Long, state: CaptureState): CaptureManifest {
-        check(!closed); require(state in listOf(CaptureState.COMPLETED, CaptureState.INTERRUPTED, CaptureState.FAILED)); require(endNs >= initial.startedNs)
+        writable(); require(state in listOf(CaptureState.COMPLETED, CaptureState.INTERRUPTED, CaptureState.FAILED)); require(endNs >= initial.startedNs)
         close()
         val manifest = initial.toBuilder().setEndedNs(endNs).setState(state).clearStreams()
             .addAllStreams(CaptureProject.streamPaths.map { CaptureProject.reference(root, it, "protobuf-delimited") }).build()
@@ -270,6 +326,13 @@ class CaptureWriter internal constructor(private val root: File, private val ini
         CaptureProject.atomicWrite(root, CaptureProject.MANIFEST, manifest.toByteArray())
         return manifest
     }
-    override fun close() { if (!closed) { try { outputs.values.forEach { it.fd.sync() } } finally { outputs.values.forEach { it.close() }; closed = true } } }
+    override fun close() {
+        if (closed) return
+        var failure: Throwable? = null
+        try { outputs.values.forEach { it.syncToDisk() } }
+        catch (syncFailure: Throwable) { failure = syncFailure; if (syncFailure is IOException) poisoned = syncFailure }
+        finally { failure = closeHandles(failure) }
+        failure?.let { throw it }
+    }
     private fun references(value: CaptureFrame): List<Asset> = buildList { if (value.hasRgb()) add(value.rgb); value.depthList.forEach { if (it.hasDepth()) add(it.depth); if (it.hasConfidence()) add(it.confidence) } }
 }
