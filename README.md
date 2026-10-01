@@ -16,7 +16,7 @@ Camera capture, transfer, dense reconstruction, and desktop worker modules are d
 ## Build prerequisites
 
 - Full JDK 21 with JNI headers. Android Studio's bundled JBR may not include the headers needed for host JNI builds; set `JAVA_HOME` to a full JDK.
-- CMake 3.22 or newer, a C++20 compiler, Python 3, and network access for the first dependency-fetching build.
+- CMake 3.24 or newer, a C++20 compiler, Python 3.11 or newer, and network access for the first dependency-fetching build.
 - Android SDK platform 37, NDK `28.2.13676358`, and CMake `3.30.5`; set `ANDROID_HOME` to the SDK root. Android native builds target `arm64-v8a` and `x86_64`.
 - iOS build and device validation require macOS with Xcode; they are not available on the current Linux host.
 
@@ -43,4 +43,4 @@ cmake --build build/native --parallel 4
 ctest --test-dir build/native --output-on-failure
 ```
 
-The Gradle tasks and scripts are introduced alongside the foundation implementation. Do not report a command as validated unless it was actually run successfully in the current environment.
+`tools/validate.sh` runs the local CI equivalent. GitHub Actions also executes Android JNI and native tests on an x86_64 API 35 emulator. Benchmark output is diagnostic JSON; its wall time has no CI pass threshold.

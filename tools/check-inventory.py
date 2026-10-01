@@ -40,7 +40,7 @@ def resolved_version(entry: dict, versions: dict) -> str | None:
     return None
 
 
-def check_catalog(root: Path, catalog: dict, inventory: dict) -> list[str]:
+def check_catalog(root: Path, inventory: dict) -> list[str]:
     errors: list[str] = []
     toml_path = root / "gradle/libs.versions.toml"
     data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
@@ -134,7 +134,7 @@ def check_licenses(inventory: dict) -> list[str]:
         scope = entry.get("scope")
         if license_id not in KNOWN_LICENSES:
             errors.append(f"{coordinate} has unknown license {license_id!r}")
-        if license_id in COPYLEFT_LICENSES and scope == "production":
+        if license_id in COPYLEFT_LICENSES and scope in {"production", "production-transitive"}:
             errors.append(f"copyleft dependency {coordinate} is marked production")
         if scope not in {"production", "production-transitive", "test", "development", "build", "toolchain"}:
             errors.append(f"{coordinate} has unknown scope {scope!r}")
@@ -162,7 +162,7 @@ def main() -> int:
 
     try:
         inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-        errors = check_catalog(root, inventory.get("catalog", {}), inventory)
+        errors = check_catalog(root, inventory)
         errors.extend(check_additional(root, inventory.get("additional", [])))
         errors.extend(check_licenses(inventory))
     except (OSError, json.JSONDecodeError, tomllib.TOMLDecodeError) as error:
