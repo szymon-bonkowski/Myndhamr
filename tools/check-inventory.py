@@ -115,6 +115,11 @@ def check_additional(root: Path, rows: list[dict]) -> list[str]:
         elif name == "Protobuf C++ runtime and protoc":
             if row.get("version") != native_pins.get("PROTOBUF"):
                 errors.append(f"{name} version does not match native Protobuf pin")
+        elif name == "CMake minimum":
+            cmake = (root / "native/CMakeLists.txt").read_text(encoding="utf-8")
+            match = re.search(r"cmake_minimum_required\(VERSION ([^)]+)\)", cmake)
+            if not match or row.get("version") != f">={match.group(1)}":
+                errors.append("CMake minimum does not match native/CMakeLists.txt")
         elif name == "Abseil C++":
             if row.get("version") != native_pins.get("ABSEIL"):
                 errors.append(f"{name} version does not match native Abseil pin")
