@@ -73,10 +73,31 @@ Primary owns architecture, native/schema/JNI and integration review. Luna high h
 Retain existing app paths; introduce useful boundaries rather than wholesale monorepo path migration. Preserve iOS/shared UI templates. Replace generated desktop GUI with headless harness per explicit v0.0 request. Generated wire types are JVM/Android initially; pure domain supports iOS.
 
 ## Discoveries
+AndroidX ext-junit supplies the JUnit adapter but not AndroidJUnitRunner itself. Explicit runner dependency is required; without it AGP reported success with zero tests after instrumentation startup crashed. The executed-test-count guard exposed this and now passes 2/2 on a local emulator.
 Baseline metadata had negative timestamps on several checkout directories; repaired metadata and baseline Android/shared tests passed. Android Studio JBR has no JNI headers; Gradle nativeConfigure uses the full daemon JDK. Protobuf 36.2/Java 4.36.2 with Abseil 20250512.1 and bundled utf8_range selected from verified upstream release/source; source archive hashes pin downloads.
 
 ## Final validation
-Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android APK/test APK/lint passed; shared/domain Android host tests passed; standalone Android native test and benchmark passed (1000 round trips/checksum 38000). Phone instrumentation produced zero tests despite Gradle success; direct adb install confirmed INSTALL_FAILED_USER_RESTRICTED. Added explicit executed-test-count check. Remote CI pending correction/verification.
+Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android APK/test APK/lint passed; shared/domain Android host tests passed; standalone Android native test and benchmark passed (1000 round trips/checksum 38000). Phone instrumentation produced zero tests despite Gradle success; direct adb install confirmed INSTALL_FAILED_USER_RESTRICTED. Added explicit executed-test-count check. First remote fresh host/Android build passed; strict emulator gate caught a missing AndroidJUnitRunner runtime dependency. Added explicit test-only runner 1.7.0. Local x86_64 API 37.1 emulator now executes both JNI tests successfully. Remote API 35 rerun pending.
+
+## Acceptance record
+| Requirement | Status / evidence |
+| --- | --- |
+| Clean configuration | Pass: Gradle configuration/cache and CMake host/NDK configure |
+| Android build | Pass: app/test APK, arm64-v8a and x86_64 JNI |
+| Desktop/JVM foundation | Pass: domain tests, CLI tests/build/run; no GUI dependency |
+| Host C++20 core | Pass: Release build with project warnings as errors |
+| Host native unit tests | Pass: CTest foundation |
+| Android C++ build | Pass: both JNI ABIs and standalone arm64 test/benchmark |
+| Android native unit execution | Pass: physical Android 15 arm64 phone |
+| Reproducible Protobuf generation | Pass: independent Java/C++ outputs compared; stale generation regression |
+| Real Kotlin/C++ Protobuf round trip | Pass: four JVM JNI tests including unknown fields, extreme timestamps, rejection and golden |
+| Benchmark smoke | Pass: host and Android serialization JSON, correctness checksum 38000 |
+| Golden/synthetic fixtures | Pass: reviewed wire fixture with exact integer/raw bytes |
+| Local CI equivalent | Pass: tools/validate.sh incl. Android host tests and lint |
+| Dependency/license check | Pass: catalog/pins/license inventory checker; complete transitive shipping audit deferred |
+| Remote CI and emulator JNI | Fresh remote build passed; local API 37.1 emulator JNI 2/2 pass; corrected full CI rerun pending |
+| Physical-device instrumented JNI | Not executed: INSTALL_FAILED_USER_RESTRICTED; zero tests detected explicitly |
+| iOS build/tests | Not executed: Linux lacks Xcode/macOS; iOS targets/shell preserved |
 
 ## Outcome
-Pending.
+Pending remote CI gate. All local applicable requirements passed; no v0.1 behavior implemented.

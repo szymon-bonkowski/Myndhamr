@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":shared:domain"))
     implementation(project(":shared:scan-format"))
     androidTestImplementation(libs.androidx.testExt.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 
     implementation(libs.androidx.activity.compose)
 

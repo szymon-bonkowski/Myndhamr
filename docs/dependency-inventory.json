@@ -128,6 +128,14 @@
         "license": "Apache-2.0",
         "scope": "production",
         "status": "unused"
+      },
+      "androidx-test-runner": {
+        "coordinate": "androidx.test:runner",
+        "version": "1.7.0",
+        "license": "Apache-2.0",
+        "scope": "test",
+        "status": "used",
+        "license_url": "https://github.com/android/android-test/blob/main/LICENSE"
       }
     },
     "plugins": {
