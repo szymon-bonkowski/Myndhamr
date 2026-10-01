@@ -12,7 +12,7 @@ Directory and ZIP ingest, image decoding, explicit normalized inputs, determinis
 ## Non-goals
 No dense stereo, meshing, automatic keyframes, capture changes, GUI framework, transfer or later milestones.
 
-## Current state
+## Initial state
 Clean main at e64ec1c; v0.1 complete. CaptureProject validates and streams four Protobuf journals, imports checked ZIPs, and preserves raw I420 RGB and calibrated depth. desktopApp provides validate/inspect/replay. Native C++20/JNI and deterministic code generation exist. Real captures live under ignored build/acceptance including 31-keyframe moving-long scan. Baseline tools/validate.sh passed on 2026-10-01. COLMAP is being provisioned in an ignored virtual environment.
 
 ## Contracts and invariants
@@ -27,7 +27,7 @@ Depth checks project aligned observed sparse points to original CPU pixels, appl
 ## Implementation map
 - desktopApp reconstruction package: typed ingest, pair graph, run orchestration, diagnostics, viewer.
 - desktop-workers/colmap-adapter: pinned Python binding around native COLMAP, process isolation and native model export.
-- native/geometry: robust similarity estimator and standalone/JNI boundary with controlled tests.
+- native/geometry: robust similarity estimator and standalone process boundary with controlled tests; existing JNI contracts are unchanged.
 - tests/fixtures and tools: deterministic synthetic scan generator and reconstruction acceptance, benchmark and CI paths.
 - docs: contract/commands and dependency audit.
 
@@ -72,7 +72,8 @@ Coordinator owns geometry contract, numerical implementation, integration and re
 - [x] M2 geometry/metric alignment.
 - [x] M3 sparse worker.
 - [x] M4 aligned artifacts/depth/inspection.
-- [ ] M5 full acceptance/CI/closure.
+- [x] M5 independent regression, benchmark, CI, cleanup and stable commits/push.
+- [ ] M5 suitable real-reference registration/metric acceptance and milestone closure.
 
 ## Decisions made during implementation
 2026-10-01: use pinned pycolmap3.13.0 out of process; native COLMAP owns SfM, Python is adapter/data tooling, Kotlin owns orchestration, C++ owns metric estimation. Prior use is pairing plus robust alignment; covariance-free v1 poses are not hard constraints in BA.
@@ -90,7 +91,10 @@ v0.1 baseline is newer than memory notes and already includes independent CPU/Ca
 - Real directory and exported package produce identical normalized31-keyframe inputs. All raw source entries compared byte-for-byte with the accepted v0.1 ZIP; no raw edits. Source ZIP SHA25603754391c451f44a60f0054fb82dea3a336a1580ee357dd02e1bb7afb107bb78.
 - Real long default graph:5/31 (16.129%), two sparse components [5,4],110points,360observations; verified graph9components. Broader diagnostic matching across all31 small-scan frames and1.5degree initialization:11/31 (35.484%), components[11,5],371points, verified graph6components [23,3,2,1,1,1]. Default metric alignment fails; diagnostic thresholds0.05/0.1/0.2/0.5m all fail60% consensus. No failed frame was excluded. Paths build/acceptance/v02-real-long-run and v02-real-long-expanded.
 - Additional real short capture ingest passes but only2 eligible frames; explicit insufficient-data failure. Other locally available scans have0 keyframes. Documents/final-system-export.scan3d.zip is identical to the already-tested long export. The user confirmed there are no additional scans beyond the31-keyframe capture; the connected phone contains only that project. Suitable real reference acceptance remains externally blocked by capture coverage/data consistency; no claim that the capture lifecycle tests prove SfM quality.
-- Remote CI run36927255950 on1c7de00 failed only the immediate descendant-state assertion: Linux reported a runnable child with SIGKILL already pending after asynchronous destroyForcibly. Java21 explicitly permits delayed termination. Independent review confirmed a test observation race; the assertion now polls up to3s for actual absence/zombie state, never accepts a merely pending signal, and retains strict failure for a running child. Targeted six process tests pass locally. Full remote rerun pending after this test-only correction; emulator stages were skipped in the failed run and are not marked passed.
+- Remote CI run36927255950 on1c7de00 failed only the immediate descendant-state assertion: Linux reported a runnable child with SIGKILL already pending after asynchronous destroyForcibly. Java21 explicitly permits delayed termination. Independent review confirmed a test observation race; the assertion now polls up to3s for actual absence/zombie state, never accepts a merely pending signal, and retains strict failure for a running child. Targeted six process tests pass locally. Remote rerun36929519603 on a69bcb7 passed all stages. The failed run's skipped emulator stages are superseded by this actually executed successful rerun.
+
+- Remote successful run: https://github.com/szymon-bonkowski/Myndhamr/actions/runs/36929519603. Code revision a69bcb7d4641787979fdb07dc6d0d63f26417c57. Desktop24, Android17 unit, domain37 JVM+37 Android host, scan-format4 and project-store16 tests all show zero errors/failures/skips in downloaded reports. Native host2/2, Python worker8 and metric3 pass. Remote controlled scene10/10 (100%),4674points,max camera residual0.000741835441m,median depth ratio0.999828230555 (0.017177% error); native scheduling explains small differences from local measurements within the declared tolerances. Android JNI gate confirms2 executed tests without failures/skips; Android native foundation and device benchmark passed on API35 x86_64 emulator. Evidence build/acceptance/v02-remote-ci-success.log and v02-ci-success-reports.
+- Final audit against sensor-sync-calibration confirms explicit preserved clocks, provider association/rejection, measured pixel mapping, units/axes and controlled source/confidence tests. No new physical accuracy claim; suitable real metric validation remains unavailable. Probe processes, temporary worktrees/browser/server are removed. Repository code is committed/pushed; the remaining final commit records only these validation results.
 
 ## Outcome
-Implementation and all deterministic/controlled gates are complete. Real-data ingest/failure diagnosis is complete; >95% real reference registration and meaningful real metric validation are NOT passed. Keep this plan active until suitable existing/new physical capture evidence passes the unchanged gate. Do not move to completed or label v0.2 complete merely because the software/controlled fixture works. Independent cleanup, stable commits/push and remote CI are being completed.
+Implementation and all deterministic/controlled gates are complete. Real-data ingest/failure diagnosis is complete; >95% real reference registration and meaningful real metric validation are NOT passed. Keep this plan active until suitable existing/new physical capture evidence passes the unchanged gate. Do not move to completed or label v0.2 complete merely because the software/controlled fixture works. Independent cleanup, stable commits/push and remote CI are complete. This validation-only final plan update does not change executable code tested at a69bcb7. The remaining external input is a suitable real capture with overlapping viewpoints, usable translational baseline and internally consistent measured poses; v0.3 must wait for the unchanged v0.2 gate.
