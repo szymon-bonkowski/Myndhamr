@@ -1,0 +1,134 @@
+syntax = "proto3";
+package myndhamr.scan.v1;
+option java_package = "io.github.szymonbonkowski.myndhamr.scan.v1";
+option java_multiple_files = true;
+option java_outer_classname = "CaptureSchema";
+
+// Original source time, never converted to epoch or floating point.
+message Timestamp {
+  int64 value_ns = 1;
+  string clock_domain = 2;
+  int64 arrival_elapsed_ns = 3;
+}
+message Intrinsics {
+  double fx = 1;
+  double fy = 2;
+  double cx = 3;
+  double cy = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  string model = 7;
+}
+// T_world_camera, metres, right-handed ARCore camera (+X right,+Y up,-Z forward),
+// column vectors, column-major 4x4. Valid only while tracking is TRACKING.
+message Pose {
+  repeated double column_major = 1;
+  string convention = 2;
+}
+message Asset {
+  string path = 1;
+  uint64 size = 2;
+  bytes sha256 = 3;
+  string encoding = 4;
+}
+enum TrackingState {
+  TRACKING_UNSPECIFIED = 0;
+  TRACKING = 1;
+  PAUSED = 2;
+  STOPPED = 3;
+}
+enum DepthSource {
+  DEPTH_SOURCE_UNSPECIFIED = 0;
+  ARCORE_RAW = 1;
+  ARCORE_SMOOTHED = 2;
+}
+enum DepthAvailability {
+  DEPTH_AVAILABILITY_UNSPECIFIED = 0;
+  AVAILABLE = 1;
+  TEMPORARILY_UNAVAILABLE = 2;
+  UNSUPPORTED = 3;
+}
+message DepthRecord {
+  DepthSource source = 1;
+  DepthAvailability availability = 2;
+  Timestamp timestamp = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  Intrinsics intrinsics = 6;
+  string alignment = 7;
+  double unit_meters = 8;
+  Asset depth = 9;
+  Asset confidence = 10;
+  string detail = 11;
+  // Explicit storage policy: metadata retained while this non-keyframe estimate is not saved.
+  bool asset_omitted_by_policy = 12;
+}
+message CameraObservation {
+  Timestamp timestamp = 1;
+  int64 frame_number = 2;
+  optional int64 exposure_ns = 3;
+  optional int32 iso = 4;
+  optional float focal_mm = 5;
+  optional int64 rolling_shutter_ns = 6;
+  string physical_camera_id = 7;
+  string logical_camera_id = 8;
+  string timestamp_source = 9;
+  repeated double intrinsic_calibration = 10;
+  repeated double lens_distortion = 11;
+  repeated int32 crop_region = 12;
+  repeated double color_gains = 13;
+  repeated double lens_pose_translation = 14;
+  repeated double lens_pose_rotation = 15;
+  optional int32 sensor_orientation_degrees = 16;
+}
+message CaptureFrame {
+  uint64 frame_id = 1;
+  Timestamp ar_timestamp = 2;
+  Timestamp camera_timestamp = 3;
+  TrackingState tracking_state = 4;
+  Pose pose = 5;
+  Intrinsics intrinsics = 6;
+  CameraObservation camera = 7;
+  repeated DepthRecord depth = 8;
+  bool keyframe = 9;
+  Asset rgb = 10;
+  string failure_reason = 11;
+  string image_format = 12;
+  uint32 image_width = 13;
+  uint32 image_height = 14;
+  Timestamp image_timestamp = 15;
+  repeated double projection_column_major = 16;
+  optional double projection_near_meters = 17;
+  optional double projection_far_meters = 18;
+}
+message ImuSample {
+  string type = 1;
+  Timestamp timestamp = 2;
+  repeated double values = 3;
+  int32 accuracy = 4;
+}
+message SessionEvent {
+  string type = 1;
+  Timestamp timestamp = 2;
+  string detail = 3;
+}
+enum CaptureState {
+  CAPTURE_STATE_UNSPECIFIED = 0;
+  RECORDING = 1;
+  COMPLETED = 2;
+  INTERRUPTED = 3;
+  FAILED = 4;
+}
+message CaptureManifest {
+  uint32 format_version = 1;
+  string project_id = 2;
+  string device = 3;
+  repeated string capabilities = 4;
+  int64 started_ns = 5;
+  int64 ended_ns = 6;
+  CaptureState state = 7;
+  string pose_convention = 8;
+  string image_convention = 9;
+  repeated Asset streams = 10;
+  string app_version = 11;
+}
