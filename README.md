@@ -32,10 +32,10 @@ Run from the repository root:
 python3 tools/check-inventory.py
 tools/validate.sh
 tools/android-native-test.sh
-./gradlew :androidApp:connectedDebugAndroidTest
+tools/android-jni-test.sh
 ```
 
-`tools/android-native-test.sh` and the connected Android test require a configured SDK and attached compatible device/emulator. On a host with the prerequisites above, the native layer can also be built and tested directly:
+`tools/android-native-test.sh` and `tools/android-jni-test.sh` require a configured SDK and attached compatible device/emulator. On a host with the prerequisites above, the native layer can also be built and tested directly:
 
 ```sh
 cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release

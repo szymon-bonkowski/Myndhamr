@@ -66,7 +66,7 @@ Primary owns architecture, native/schema/JNI and integration review. Luna high h
 ## Progress
 - [x] M1 baseline/domain/CLI — baseline Android/shared tests and integrated domain/CLI tests pass.
 - [x] M2 native/schema/JNI — host CTest, four JVM JNI tests, golden wire test and independent Java/C++ regeneration pass.
-- [ ] M3 Android/device
+- [x] M3 Android/device — APK/test APK and both JNI ABIs build; lint clean; standalone native tests and benchmark executed successfully on arm64 Android 15. Phone rejects APK installation with INSTALL_FAILED_USER_RESTRICTED, so physical-device instrumented JNI is not executed; CI emulator gate remains required.
 - [ ] M4 fixtures/benchmark/inventory/CI
 
 ## Decisions made during implementation
@@ -76,7 +76,7 @@ Retain existing app paths; introduce useful boundaries rather than wholesale mon
 Baseline metadata had negative timestamps on several checkout directories; repaired metadata and baseline Android/shared tests passed. Android Studio JBR has no JNI headers; Gradle nativeConfigure uses the full daemon JDK. Protobuf 36.2/Java 4.36.2 with Abseil 20250512.1 and bundled utf8_range selected from verified upstream release/source; source archive hashes pin downloads.
 
 ## Final validation
-Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android and remote CI pending.
+Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android APK/test APK/lint passed; shared/domain Android host tests passed; standalone Android native test and benchmark passed (1000 round trips/checksum 38000). Phone instrumentation produced zero tests despite Gradle success; direct adb install confirmed INSTALL_FAILED_USER_RESTRICTED. Added explicit executed-test-count check. Remote CI pending correction/verification.
 
 ## Outcome
 Pending.

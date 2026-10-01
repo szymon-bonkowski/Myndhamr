@@ -19,6 +19,8 @@ jobs:
           distribution: zulu
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
       - name: Install pinned Android toolchains
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.30.5'
       - name: Host, JVM, Android, goldens, generation and benchmark
@@ -35,7 +37,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: |
-            ./gradlew :androidApp:connectedDebugAndroidTest --console=plain
+            tools/android-jni-test.sh
             MYNDHAMR_ANDROID_ABI=x86_64 tools/android-native-test.sh
       - name: Preserve test and lint reports
         if: always()
