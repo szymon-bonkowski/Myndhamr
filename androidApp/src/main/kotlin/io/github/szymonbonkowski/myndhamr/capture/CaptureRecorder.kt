@@ -297,7 +297,7 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
                         project=p;frames=result.frames;keyframes=result.keyframes
                         state=savedState;tracking="NONE";failure=null
                     }
-                    updateStatus();report("Saved project: ${p.name}; $result")
+                    updateStatus();report("Saved project: ${p.name} | $savedState | frames=${result.frames} | keyframes=${result.keyframes}")
                 }
             } catch(e:Exception) { reopenErrors++;lastOperationFailure="REOPEN:${e.message}";updateStatus();report("Reopen failed: ${e.message}") }
         }
