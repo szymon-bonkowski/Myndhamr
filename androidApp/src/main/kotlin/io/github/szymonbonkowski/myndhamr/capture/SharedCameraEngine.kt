@@ -140,7 +140,7 @@ internal class SharedCameraEngine(
         } catch(e:Exception) { fail("ARCore update",e) }
     }
     fun geometry(rotation:Int,width:Int,height:Int) = synchronized(lifecycle) { if(::session.isInitialized && !closing.get() && !closed.get()) session.setDisplayGeometry(rotation,width,height) }
-    /** Called on GL after update exits. Queued Camera2 shutdown precedes completion; no UI waiting. */
+    /** Independent stop thread acquires lifecycle after update exits; Camera2 shutdown precedes completion. */
     fun close(completed:()->Unit) {
         synchronized(lifecycle) {
             if(closing.get()) return

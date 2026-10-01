@@ -45,6 +45,9 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
     @Volatile var keyframes=0L; private set
     @Volatile var queueHighWater=0; private set
     @Volatile var tracking="NONE"; private set
+    @Volatile private var exportErrors=0L
+    @Volatile private var reopenErrors=0L
+    @Volatile private var lastOperationFailure:String?=null
     private var lastStatus=0L
     @Volatile private var destroyed=false
     private val stopCallbacks=mutableListOf<()->Unit>()
@@ -58,7 +61,7 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
     fun start() {
         val sessionToken=synchronized(gate) {
             if(state=="STARTING" || accepting.get() || stopping.get() || destroyed) return
-            generation++; project=null;state="STARTING"; failure=null; frames=0; keyframes=0; frameId=0; lastArTimestamp=0; admission=CameraFrameAdmission(); queueHighWater=0; keyframe.set(false)
+            generation++; project=null;state="STARTING"; failure=null; frames=0; keyframes=0; frameId=0; lastArTimestamp=0; admission=CameraFrameAdmission(); queueHighWater=0; tracking="NONE"; keyframe.set(false)
             generation
         }
         updateStatus()
@@ -265,7 +268,10 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
                     stream.use { target -> output.inputStream().use { source -> source.copyTo(target,64*1024) } }
                     report("Scan exported to selected document")
                 } else report("Export saved: ${output.name}")
-            } catch(e:Exception) { report("Export failed: ${e.message}"); android.util.Log.e("MyndhamrCapture","EXPORT_FAILED",e) }
+            } catch(e:Exception) {
+                exportErrors++;lastOperationFailure="EXPORT:${e.message}";updateStatus()
+                report("Export failed: ${e.message}"); android.util.Log.e("MyndhamrCapture","EXPORT_FAILED",e)
+            }
         }
     }
     fun reopenLatest() {
@@ -278,15 +284,24 @@ class CaptureRecorder(private val context:Context, val view:GLSurfaceView, priva
                     if(CaptureProject.readManifest(p).state==CaptureState.RECORDING) {
                         CaptureProject.recover(p).use { it.finish(SystemClock.elapsedRealtimeNanos(),CaptureState.INTERRUPTED) }
                     }
-                    val result=CaptureProject.validate(p);synchronized(gate) { if(token==generation)project=p };report("Saved project: ${p.name}; $result")
+                    val result=CaptureProject.validate(p)
+                    require(result.valid) { "Invalid saved project: ${result.diagnostics.joinToString()}" }
+                    val savedState=requireNotNull(result.manifest).state.name
+                    synchronized(gate) {
+                        if(token!=generation || destroyed) return@executeControl
+                        project=p;frames=result.frames;keyframes=result.keyframes
+                        state=savedState;tracking="NONE";failure=null
+                    }
+                    updateStatus();report("Saved project: ${p.name}; $result")
                 }
-            } catch(e:Exception) { report("Reopen failed: ${e.message}") }
+            } catch(e:Exception) { reopenErrors++;lastOperationFailure="REOPEN:${e.message}";updateStatus();report("Reopen failed: ${e.message}") }
         }
     }
     fun destroy() { destroyed=true;if(accepting.get() || state=="STARTING" || stopping.get())stop(CaptureState.INTERRUPTED) else executor.shutdown() }
     private fun updateStatus() {
         val value=JSONObject().put("state",state).put("project",project?.name).put("frames",frames).put("keyframes",keyframes)
             .put("tracking",tracking).put("queue",executor.queueSize).put("queueHighWater",queueHighWater).put("queuedBytes",executor.queuedBytes).put("failure",failure).put("failureCallbackErrors",executor.failureCallbackErrors).put("queueLifetimeLastFailure",executor.lastFailure)
+            .put("pendingKeyframe",keyframe.get()).put("exportErrors",exportErrors).put("reopenErrors",reopenErrors).put("lastOperationFailure",lastOperationFailure)
         // Small operational status is derived, outside immutable project. Avoid disk on capture threads.
         android.os.Handler(android.os.Looper.getMainLooper()).post { report("$state | $tracking | frames=$frames | keyframes=$keyframes${failure?.let { " | $it" } ?: ""}") }
         executor.offerOptional { File(context.filesDir,"capture-status.json").writeText(value.toString()) }
