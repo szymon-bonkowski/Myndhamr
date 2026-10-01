@@ -136,6 +136,14 @@
         "scope": "test",
         "status": "used",
         "license_url": "https://github.com/android/android-test/blob/main/LICENSE"
+      },
+      "arcore": {
+        "coordinate": "com.google.ar:core",
+        "version": "1.56.0",
+        "license": "Apache-2.0",
+        "scope": "production",
+        "status": "used",
+        "notes": "SDK license Apache-2.0; Google Play Services for AR separately installed runtime terms. https://github.com/google-ar/arcore-android-sdk/blob/main/LICENSE"
       }
     },
     "plugins": {

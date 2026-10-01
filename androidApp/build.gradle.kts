@@ -14,6 +14,9 @@ dependencies {
     implementation(project(":shared"))
     implementation(project(":shared:domain"))
     implementation(project(":shared:scan-format"))
+    implementation(project(":shared:project-store"))
+    implementation(libs.arcore)
+    testImplementation(libs.kotlin.testJunit)
     androidTestImplementation(libs.androidx.testExt.junit)
     androidTestImplementation(libs.androidx.test.runner)
 
@@ -39,7 +42,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "0.0.0"
+        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild {
