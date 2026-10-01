@@ -28,6 +28,8 @@ class CaptureWorkQueue(
     private var shutdownRequested = false
     private var terminated = false
     private var writer: Thread? = null
+    private var notificationErrors = 0L
+    private var latestFailure: String? = null
 
     init {
         require(capacity > CONTROL_RESERVE) { "Queue capacity must leave at least one producer slot and four control slots" }
@@ -38,6 +40,8 @@ class CaptureWorkQueue(
     val highWater: Int get() = lock.withLock { maximumWaiting }
     val queuedBytes: Long get() = lock.withLock { payloadBytes }
     val isTerminated: Boolean get() = lock.withLock { terminated }
+    val failureCallbackErrors: Long get() = lock.withLock { notificationErrors }
+    val lastFailure: String? get() = lock.withLock { latestFailure }
 
     /** Rejects before allocating a queue slot or charging any bytes. */
     fun offer(bytes: Long = 0, task: () -> Unit): Boolean = offerInternal(bytes, true, task)
@@ -174,10 +178,12 @@ class CaptureWorkQueue(
     }
 
     private fun reportFailure(message: String) {
+        lock.withLock { latestFailure = message }
         try {
             onFailure(message)
         } catch (_: Throwable) {
-            // A UI/diagnostic callback must not kill the writer or lose later accepted measurements.
+            // Preserve the diagnostic even when a UI callback cannot report it to the owner.
+            lock.withLock { if (notificationErrors < Long.MAX_VALUE) notificationErrors++ }
         }
     }
 

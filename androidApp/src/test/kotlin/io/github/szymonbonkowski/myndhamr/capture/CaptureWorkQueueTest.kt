@@ -139,7 +139,7 @@ class CaptureWorkQueueTest {
     @Test
     fun taskFailureReleasesBytesAndPreservesTheRemainingAcceptedPrefixAndFinalizer() {
         val failures = CopyOnWriteArrayList<String>()
-        val queue = CaptureWorkQueue(failures::add, capacity = 20, byteBudget = 10)
+        val queue = CaptureWorkQueue({ failures += it; throw IllegalStateException("notification failed") }, capacity = 20, byteBudget = 10)
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val observed = mutableListOf<Int>()
@@ -152,6 +152,8 @@ class CaptureWorkQueueTest {
             close(queue, release)
             assertEquals(listOf(1, 2, 3, 4), observed)
             assertEquals(listOf("CAPTURE_WORK_FAILED:disk failed"), failures.toList())
+            assertEquals("CAPTURE_WORK_FAILED:disk failed", queue.lastFailure)
+            assertEquals(1, queue.failureCallbackErrors)
             assertEquals(0, queue.queuedBytes)
             assertEquals(0, queue.queueSize)
         } finally {
@@ -174,6 +176,8 @@ class CaptureWorkQueueTest {
             await(second)
             close(queue)
             assertEquals(0, queue.queuedBytes)
+            assertEquals("CAPTURE_WORK_FAILED:finalizer failed", queue.lastFailure)
+            assertEquals(1, queue.failureCallbackErrors)
         } finally {
             close(queue)
         }
