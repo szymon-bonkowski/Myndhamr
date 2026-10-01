@@ -96,11 +96,11 @@ object CaptureProject {
         var errors = 0L
         val diagnostics = mutableListOf<String>()
         fun issue(message: String) { errors++; if (diagnostics.size < 100) diagnostics += message }
-        fun check(block: () -> Unit) { try { block() } catch (e: Exception) { issue(e.message ?: e.javaClass.simpleName) } }
+        fun check(context: String = "", block: () -> Unit) { try { block() } catch (e: Exception) { issue((if(context.isBlank()) "" else "$context: ") + (e.message ?: e.javaClass.simpleName)) } }
         var manifest: CaptureManifest? = null
-        check { manifest = readManifest(root, limits) }
+        check(MANIFEST) { manifest = readManifest(root, limits) }
         val verifiedAssets = object : LinkedHashMap<Asset, Boolean>(128, .75f, true) { override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Asset, Boolean>?) = size > 128 }
-        fun asset(value: Asset) { if (!verifiedAssets.containsKey(value)) { check { verifyAsset(root, value) }; verifiedAssets[value] = true } }
+        fun asset(value: Asset) { if (!verifiedAssets.containsKey(value)) { check(value.path) { verifyAsset(root, value) }; verifiedAssets[value] = true } }
         manifest?.let { value ->
             if (value.state == CaptureState.RECORDING) issue("Project is not finalized")
             if (value.streamsList.map { it.path }.sorted() != streamPaths.sorted()) issue("Manifest must reference exactly four raw streams")
@@ -109,9 +109,9 @@ object CaptureProject {
         var frames = 0L; var keyframes = 0L; var imu = 0L; var camera = 0L; var events = 0L; var tracked = 0L; var depthFrames = 0L
         var previousFrameId = 0L; var maxImuGap = 0L; var regressions = 0L
         val imuTimes = mutableMapOf<String, Long>()
-        check { visitFrames(root, limits) { value ->
-            frames++; check { CaptureValidation.frame(value) }
-            if (value.frameId <= previousFrameId) issue("Frame IDs are not strictly increasing")
+        check(FRAMES) { visitFrames(root, limits) { value ->
+            frames++; check("$FRAMES frameId ${value.frameId}") { CaptureValidation.frame(value) }
+            if (value.frameId <= previousFrameId) issue("$FRAMES frameId ${value.frameId}: Frame IDs are not strictly increasing")
             previousFrameId = value.frameId
             if (value.keyframe) keyframes++
             if (value.trackingState == TrackingState.TRACKING) tracked++
@@ -119,8 +119,8 @@ object CaptureProject {
             if (value.depthList.any { it.availability == DepthAvailability.AVAILABLE }) depthFrames++
             value.depthList.forEach { if (it.hasDepth()) asset(it.depth); if (it.hasConfidence()) asset(it.confidence) }
         } }
-        check { visitImu(root, limits) { value ->
-            imu++; check { CaptureValidation.imu(value) }
+        check(IMU) { visitImu(root, limits) { value ->
+            imu++; check("$IMU sample $imu") { CaptureValidation.imu(value) }
             val key = "${value.type}:${value.timestamp.clockDomain}"
             // Bounded even for deliberately hostile clock/type strings.
             if (imuTimes.size < 64 || imuTimes.containsKey(key)) {
@@ -128,8 +128,8 @@ object CaptureProject {
                 if (previous != null) { val gap = value.timestamp.valueNs - previous; if (gap < 0) regressions++ else maxImuGap = maxOf(maxImuGap, gap) }
             } else issue("Too many IMU timestamp domains")
         } }
-        check { visitCamera(root, limits) { camera++; check { CaptureValidation.camera(it) } } }
-        check { visitEvents(root, limits) { events++; check { CaptureValidation.event(it) } } }
+        check(CAMERA) { visitCamera(root, limits) { camera++; check("$CAMERA observation $camera") { CaptureValidation.camera(it) } } }
+        check(EVENTS) { visitEvents(root, limits) { events++; check("$EVENTS record $events") { CaptureValidation.event(it) } } }
         if (regressions > 0) issue("IMU timestamps regress $regressions times within a source clock")
         return ValidationReport(manifest, frames, keyframes, imu, camera, events, tracked, depthFrames, maxImuGap, regressions, errors, diagnostics)
     }

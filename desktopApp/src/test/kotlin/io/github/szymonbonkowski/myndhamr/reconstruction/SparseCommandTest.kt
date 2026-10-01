@@ -64,4 +64,23 @@ class SparseCommandTest {
         }finally{root.deleteRecursively()}
     }
 
+    @Test fun exporterSuccessOrPartialDiagnosticsCannotHideTimeout() {
+        val root=Files.createTempDirectory("sparse-exporter-timeout-test").toFile()
+        try {
+            for(evidence in listOf("{\"status\":\"metric_aligned\",\"registrationAcceptancePassed\":true}","{\"status\":\"metric_aligned\",")) {
+                File(root,"diagnostics.json").writeText(evidence)
+                val failure=assertFailsWith<IllegalStateException> {
+                    SparseCommand.runProcess(listOf("sh","-c","sleep 30"),File(root,"exporter.log"),1)
+                }
+                SparseCommand.writeFailureDiagnostics(root,mapOf("status" to "failed","stage" to "metric_alignment","error" to failure.message.orEmpty()))
+                val diagnostic=File(root,"diagnostics.json").readText()
+                assertTrue(diagnostic.startsWith("{\"status\":\"failed\""))
+                assertContains(diagnostic,"timed out")
+                assertContains(diagnostic,"metricDiagnosticsPath")
+                assertFalse(diagnostic.contains("registrationAcceptancePassed"))
+                assertEquals(evidence,File(root,"metric-diagnostics-before-failure.json").readText())
+            }
+        }finally{root.deleteRecursively()}
+    }
+
 }

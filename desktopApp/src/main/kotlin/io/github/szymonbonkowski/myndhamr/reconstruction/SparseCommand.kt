@@ -79,10 +79,17 @@ object SparseCommand {
 
     internal fun writeFailureDiagnostics(root: File, failed: Map<String, Any>) {
         val target=File(root,"diagnostics.json")
-        if(target.exists()) return // Exporter already recorded the specific metric failure.
+        val document=LinkedHashMap(failed)
+        // A process can write success (or partial JSON) before timing out. Keep
+        // the exact exporter evidence separately, but always fail the overall run.
+        if(target.isFile) {
+            val evidence=File(root,"metric-diagnostics-before-failure.json")
+            target.copyTo(evidence,overwrite=true)
+            document["metricDiagnosticsPath"]=evidence.name
+        }
         val adapter=File(root,"adapter-diagnostics.json")
-        val document=if(adapter.isFile) reconstructionJson(failed).dropLast(1)+",\"adapterDiagnostics\":"+adapter.readText().trim()+"}" else reconstructionJson(failed)
-        target.writeText(document+"\n")
+        if(adapter.isFile) document["adapterDiagnosticsPath"]=adapter.name
+        target.writeText(reconstructionJson(document)+"\n")
     }
 
     internal fun runProcess(command: List<String>, log: File, timeoutSeconds: Long) {

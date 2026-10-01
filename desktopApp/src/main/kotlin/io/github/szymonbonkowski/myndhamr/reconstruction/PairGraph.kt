@@ -29,7 +29,7 @@ object PairGraphs {
 
         val edges = sortedMapOf<Pair<Long, Long>, MutableSet<String>>(compareBy<Pair<Long, Long>> { it.first }.thenBy { it.second })
         for (index in ordered.indices) {
-            val end = minOf(ordered.lastIndex, index + config.temporalWindow)
+            val end = index + minOf(ordered.lastIndex - index, config.temporalWindow)
             for (other in index + 1..end) addReason(edges, ordered[index], ordered[other], "TEMPORAL")
         }
 

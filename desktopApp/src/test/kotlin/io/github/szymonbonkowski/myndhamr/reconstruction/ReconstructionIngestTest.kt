@@ -95,6 +95,27 @@ class ReconstructionIngestTest {
         } finally { parent.deleteRecursively() }
     }
 
+    @Test
+    fun invalidRecordDiagnosticsNameFrameAndJournal() {
+        val parent=Files.createTempDirectory("reconstruction-record-errors").toFile()
+        try {
+            val source=createProject(File(parent,"source"),42,123)
+            var frame: CaptureFrame?=null
+            CaptureProject.visitFrames(source){frame=it}
+            val validFrame=requireNotNull(frame)
+            File(source,CaptureProject.FRAMES).outputStream().use { output ->
+                validFrame.toBuilder().setIntrinsics(validFrame.intrinsics.toBuilder().setFx(0.0)).build().writeDelimitedTo(output)
+            }
+            val error=assertFailsWith<IllegalArgumentException>{Ingest.prepare(source,File(parent,"run"))}
+            assertTrue(error.message.orEmpty().contains("metadata/frames.pb frameId 42"))
+            assertTrue(error.message.orEmpty().contains("Invalid calibration"))
+            val unsupported=createProject(File(parent,"version"),43,124)
+            File(unsupported,CaptureProject.MANIFEST).writeBytes(CaptureProject.readManifest(unsupported).toBuilder().setFormatVersion(99).build().toByteArray())
+            val versionError=assertFailsWith<IllegalArgumentException>{Ingest.prepare(unsupported,File(parent,"version-run"))}
+            assertTrue(versionError.message.orEmpty().contains("manifest.pb: Unsupported capture format 99"))
+        }finally{parent.deleteRecursively()}
+    }
+
     private fun createProject(
         root: File,
         frameId: Long,
@@ -160,6 +181,14 @@ class ReconstructionIngestTest {
 }
 
 class PairGraphTest {
+    @Test
+    fun temporalWindowBeyondFrameCountPreservesAllSequencePairs() {
+        val frames=(1L..4L).map { graphFrame(it,it*10.0,RigidTransform.identity()) }
+        val graph=PairGraphs.build(frames,PairGraphConfig(temporalWindow=Int.MAX_VALUE,maxLoopNeighbors=0))
+        assertEquals(6,graph.pairs.size)
+        assertTrue(graph.pairs.all { it.reason == "TEMPORAL" })
+    }
+
     @Test
     fun includesSequenceNeighborsAndSpatialLoopClosuresDeterministically() {
         val frames = (1L..14L).map { id ->
