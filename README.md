@@ -1,61 +1,46 @@
-# Myndhamr — Codex project pack
+# Myndhamr
 
-**Stan odniesienia:** 2026-09-30  
-**Cel:** zestaw trwałych plików sterujących i referencyjnych dla repozytorium Myndhamr.
+Myndhamr is a measurement-first 3D scanning system. The repository is being built in small, verifiable stages; the modules below describe what exists today, while capture backends and reconstruction workers remain future work until their implementations are owned and tested.
 
-Ten pakiet został przygotowany tak, aby projekt nadal był czytelny dla człowieka i Codexa po wielu eksperymentach, refaktorach i częściowych przebudowach. Dokumenty nie mają tworzyć biurokracji ani wymuszać ciągłego ręcznego synchronizowania wszystkiego z kodem.
+## Current layout
 
-## Co jest czym
+- `androidApp/` and `iosApp/` are platform app shells. `shared/` contains the current Compose Multiplatform UI module.
+- `shared/domain/` is pure Kotlin Multiplatform domain code, with no UI dependency.
+- `shared/scan-format/` owns versioned Protobuf contracts and generated Java bindings. Its Kotlin/JVM wrapper crosses the JNI boundary into `native/`.
+- `desktopApp/` is a headless CLI entry point. It can grow into a desktop product without making the reconstruction engine depend on a GUI.
+- `native/core/`, `native/bindings/`, `native/tests/`, and `native/benchmarks/` contain the C++20 foundation, JNI bridge, host tests, and smoke benchmark.
+- `tests/fixtures/` contains reviewed golden data shared across language boundaries.
 
-- `AGENTS.md` — krótka, repozytoryjna instrukcja operacyjna ładowana przez Codexa. To plik, który ma być zawsze zwięzły i praktyczny.
-- `ARCHITECTURE.md` — referencyjny opis systemu: granice modułów, pipeline'y, dane, matematyka, invariants, platformy i przepływy.
-- `SUBAGENT.md` — sposób delegowania pracy pomiędzy modelami; mocny model planuje i recenzuje, tańszy model wykonuje dobrze określone zadania.
-- `PLANS.md` — zasady tworzenia i prowadzenia ExecPlanów dla największych, wielogodzinnych zmian.
-- `ADR.md` — lekka polityka zapisywania tylko tych decyzji, które naprawdę warto zachować na lata.
-- `MODEL_ROUTING.md` — aktualna strategia doboru modeli i reasoning effort, wraz z uzasadnieniem benchmarkami z 2026-09-30.
-- `.agents/skills/*/SKILL.md` — repozytoryjne skille Codexa dla każdej wersji oraz dodatkowych ciężkich workstreamów.
-- `SKILLS_INDEX.md` — indeks wszystkich skillów i ich zastosowań.
-- `3d_scanner_architecture_roadmap.md` — zaktualizowana wersja wcześniejszego dużego blueprintu projektu.
+Camera capture, transfer, dense reconstruction, and desktop worker modules are deferred until their implementation and contracts exist. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system boundaries and invariants, and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the direct dependency and license inventory.
 
-## Priorytet źródeł podczas implementacji
+## Build prerequisites
 
-W razie sprzeczności używać tej kolejności:
+- Full JDK 21 with JNI headers. Android Studio's bundled JBR may not include the headers needed for host JNI builds; set `JAVA_HOME` to a full JDK.
+- CMake 3.22 or newer, a C++20 compiler, Python 3, and network access for the first dependency-fetching build.
+- Android SDK platform 37, NDK `28.2.13676358`, and CMake `3.30.5`; set `ANDROID_HOME` to the SDK root. Android native builds target `arm64-v8a` and `x86_64`.
+- iOS build and device validation require macOS with Xcode; they are not available on the current Linux host.
 
-1. bieżące, jawne wymaganie użytkownika i aktualny spec zadania,
-2. faktyczny stan repozytorium: kod, testy, schematy, benchmarki i działające interfejsy,
-3. aktywny ExecPlan dla wykonywanego zadania,
-4. zaakceptowane ADR-y dotyczące trwałych kontraktów,
-5. `ARCHITECTURE.md`,
-6. duży `3d_scanner_architecture_roadmap.md` jako referencyjny blueprint.
+## Validation commands
 
-Blueprint i `ARCHITECTURE.md` są mapą projektu, a nie obowiązkiem ręcznego aktualizowania po każdym commicie. Jeżeli implementacja celowo odchodzi od starszego opisu, agent nie może automatycznie „przywracać” starej architektury tylko dlatego, że jest zapisana w dokumencie.
+Run from the repository root:
 
-## Zalecane umieszczenie w repo
-
-Skopiuj zawartość pakietu do głównego katalogu repozytorium. Repozytoryjne skille pozostaw pod `.agents/skills/`.
-
-Długie plany wykonawcze warto przechowywać w:
-
-```text
-plans/
-├── active/
-└── completed/
+```sh
+./gradlew :androidApp:assembleDebug :shared:jvmTest :shared:domain:jvmTest :desktopApp:build
+./gradlew nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke
+./gradlew :shared:scan-format:generateProto
+./gradlew :desktopApp:run --args=--help
+python3 tools/check-inventory.py
+tools/validate.sh
+tools/android-native-test.sh
+./gradlew :androidApp:connectedDebugAndroidTest
 ```
 
-Specyfikacje konkretnych zmian:
+`tools/android-native-test.sh` and the connected Android test require a configured SDK and attached compatible device/emulator. On a host with the prerequisites above, the native layer can also be built and tested directly:
 
-```text
-specs/
+```sh
+cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native --parallel 4
+ctest --test-dir build/native --output-on-failure
 ```
 
-Trwałe ADR-y:
-
-```text
-docs/adr/
-```
-
-## Ważne o modelach
-
-Strategia modeli jest datowana. GPT-6.1 Sol zmienił sensowne domyślne routowanie: przy większości trudnej pracy architektonicznej i programistycznej powinien być pierwszym wyborem przed Astrą, natomiast GPT-6 Astra pozostaje użyteczna jako celowany specjalista do naprawdę badawczych problemów naukowych, numerycznych i fizycznych. Implementacja dobrze rozpisanych, ograniczonych zadań może być delegowana do GPT-6 Luna.
-
-Nie traktować publicznego benchmarku jako absolutnej prawdy. `MODEL_ROUTING.md` wymaga okresowego sprawdzania na własnym zestawie zadań Myndhamr.
+The Gradle tasks and scripts are introduced alongside the foundation implementation. Do not report a command as validated unless it was actually run successfully in the current environment.

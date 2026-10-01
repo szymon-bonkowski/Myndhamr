@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope_note": "Direct declarations and explicitly bundled native dependencies only; not a resolved transitive dependency audit.",
+  "catalog": {
+    "libraries": {
+      "kotlin-test": {"coordinate": "org.jetbrains.kotlin:kotlin-test", "version": "2.4.20", "license": "Apache-2.0", "scope": "test", "status": "used"},
+      "kotlin-testJunit": {"coordinate": "org.jetbrains.kotlin:kotlin-test-junit", "version": "2.4.20", "license": "Apache-2.0", "scope": "test", "status": "used"},
+      "junit": {"coordinate": "junit:junit", "version": "4.13.2", "license": "EPL-1.0", "scope": "test", "status": "used"},
+      "androidx-core-ktx": {"coordinate": "androidx.core:core-ktx", "version": "1.19.0", "license": "Apache-2.0", "scope": "production", "status": "unused"},
+      "androidx-testExt-junit": {"coordinate": "androidx.test.ext:junit", "version": "1.3.0", "license": "Apache-2.0", "scope": "test", "status": "unused"},
+      "androidx-espresso-core": {"coordinate": "androidx.test.espresso:espresso-core", "version": "3.7.0", "license": "Apache-2.0", "scope": "test", "status": "unused"},
+      "androidx-appcompat": {"coordinate": "androidx.appcompat:appcompat", "version": "1.8.0", "license": "Apache-2.0", "scope": "production", "status": "unused"},
+      "androidx-activity-compose": {"coordinate": "androidx.activity:activity-compose", "version": "1.13.0", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-uiTooling": {"coordinate": "org.jetbrains.compose.ui:ui-tooling", "version": "1.12.1", "license": "Apache-2.0", "scope": "development", "status": "used"},
+      "androidx-lifecycle-viewmodelCompose": {"coordinate": "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", "version": "2.11.0", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "androidx-lifecycle-runtimeCompose": {"coordinate": "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", "version": "2.11.0", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-runtime": {"coordinate": "org.jetbrains.compose.runtime:runtime", "version": "1.12.1", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-foundation": {"coordinate": "org.jetbrains.compose.foundation:foundation", "version": "1.12.1", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-material3": {"coordinate": "org.jetbrains.compose.material3:material3", "version": "1.12.0-alpha03", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-ui": {"coordinate": "org.jetbrains.compose.ui:ui", "version": "1.12.1", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-components-resources": {"coordinate": "org.jetbrains.compose.components:components-resources", "version": "1.12.1", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "compose-uiToolingPreview": {"coordinate": "org.jetbrains.compose.ui:ui-tooling-preview", "version": "1.12.1", "license": "Apache-2.0", "scope": "production", "status": "used"},
+      "kotlinx-coroutinesSwing": {"coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-swing", "version": "1.11.0", "license": "Apache-2.0", "scope": "production", "status": "unused"}
+    },
+    "plugins": {
+      "androidApplication": {"coordinate": "com.android.application", "version": "9.4.1", "license": "Apache-2.0", "scope": "build", "status": "used"},
+      "androidMultiplatformLibrary": {"coordinate": "com.android.kotlin.multiplatform.library", "version": "9.4.1", "license": "Apache-2.0", "scope": "build", "status": "used"},
+      "composeMultiplatform": {"coordinate": "org.jetbrains.compose", "version": "1.12.1", "license": "Apache-2.0", "scope": "build", "status": "used"},
+      "composeCompiler": {"coordinate": "org.jetbrains.kotlin.plugin.compose", "version": "2.4.20", "license": "Apache-2.0", "scope": "build", "status": "used"},
+      "kotlinJvm": {"coordinate": "org.jetbrains.kotlin.jvm", "version": "2.4.20", "license": "Apache-2.0", "scope": "build", "status": "used"},
+      "kotlinMultiplatform": {"coordinate": "org.jetbrains.kotlin.multiplatform", "version": "2.4.20", "license": "Apache-2.0", "scope": "build", "status": "used"}
+    }
+  },
+  "additional": [
+    {"name": "Gradle Wrapper", "coordinate": "Gradle distribution", "version": "9.6.0", "license": "Apache-2.0", "scope": "build", "status": "used", "source": "gradle/wrapper/gradle-wrapper.properties"},
+    {"name": "Foojay toolchain resolver", "coordinate": "org.gradle.toolchains.foojay-resolver-convention", "version": "1.0.0", "license": "Apache-2.0", "scope": "build", "status": "used", "source": "settings.gradle.kts"},
+    {"name": "Protobuf Java runtime", "coordinate": "com.google.protobuf:protobuf-java", "version": "4.36.2", "license": "BSD-3-Clause", "scope": "production", "status": "used", "source": "shared/scan-format/build.gradle.kts", "version_source": "native/dependencies.cmake:MYNDHAMR_PROTOBUF_VERSION"},
+    {"name": "Protobuf C++ runtime and protoc", "coordinate": "protobuf", "version": "36.2", "license": "BSD-3-Clause", "scope": "production", "status": "used", "source": "native/dependencies.cmake", "license_url": "https://github.com/protocolbuffers/protobuf/blob/v36.2/LICENSE", "sha256_pinned": true},
+    {"name": "Abseil C++", "coordinate": "abseil-cpp", "version": "20250512.1", "license": "Apache-2.0", "scope": "production", "status": "used", "source": "native/dependencies.cmake", "license_url": "https://github.com/abseil/abseil-cpp/blob/20250512.1/LICENSE", "sha256_pinned": true},
+    {"name": "utf8_range", "coordinate": "protobuf bundled utf8_range", "version": "bundled with Protobuf 36.2", "license": "MIT", "scope": "production-transitive", "status": "bundled", "license_url": "https://github.com/protocolbuffers/protobuf/tree/v36.2/third_party/utf8_range"},
+    {"name": "C++ language standard", "coordinate": "C++", "version": "20", "license": "N/A", "scope": "toolchain", "status": "used", "source": "native/CMakeLists.txt"},
+    {"name": "CMake minimum", "coordinate": "CMake", "version": ">=3.22", "license": "N/A", "scope": "toolchain", "status": "used", "source": "native/CMakeLists.txt"},
+    {"name": "Android NDK", "coordinate": "Android NDK", "version": "28.2.13676358", "license": "N/A", "scope": "toolchain", "status": "used", "source": "Android build configuration"},
+    {"name": "Android SDK platform", "coordinate": "Android SDK", "version": "37", "license": "N/A", "scope": "toolchain", "status": "used", "source": "gradle/libs.versions.toml"},
+    {"name": "Android native ABIs", "coordinate": "Android ABI", "version": "arm64-v8a, x86_64", "license": "N/A", "scope": "toolchain", "status": "used", "source": "Android native build configuration"}
+  ],
+  "license_policy": {
+    "known_licenses": ["Apache-2.0", "BSD-3-Clause", "EPL-1.0", "MIT", "N/A"],
+    "copyleft_licenses": ["AGPL-3.0", "GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0", "EPL-1.0"],
+    "epl_test_exception": "EPL-1.0 is allowed for entries whose scope is exactly test. Production copyleft entries fail the checker."
+  }
+}
