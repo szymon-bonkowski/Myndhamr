@@ -8,3 +8,4 @@ plugins {
     alias(libs.plugins.kotlinJvm) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
 }
+apply(from = "gradle/native.gradle.kts")

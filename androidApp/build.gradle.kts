@@ -12,6 +12,9 @@ kotlin {
 }
 dependencies {
     implementation(project(":shared"))
+    implementation(project(":shared:domain"))
+    implementation(project(":shared:scan-format"))
+    androidTestImplementation(libs.androidx.testExt.junit)
 
     implementation(libs.androidx.activity.compose)
 
@@ -21,6 +24,13 @@ dependencies {
 
 android {
     namespace = "io.github.szymonbonkowski.myndhamr"
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild {
+        cmake {
+            path = rootProject.file("native/CMakeLists.txt")
+            version = "3.30.5"
+        }
+    }
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
@@ -28,7 +38,19 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DMYNDHAMR_HOST_PROTOC=${rootProject.layout.buildDirectory.file("native/_deps/protobuf-build/protoc").get().asFile.absolutePath}",
+                    "-DBUILD_TESTING=OFF",
+                    "-DMYNDHAMR_BUILD_BENCHMARKS=OFF"
+                )
+                targets += "myndhamr_jni"
+            }
+        }
     }
     packaging {
         resources {
@@ -51,4 +73,8 @@ android {
     buildFeatures {
         compose = true
     }
+}
+// Cross-compilation uses the pinned host protoc, never an Android executable.
+tasks.configureEach {
+    if (name.startsWith("configureCMake")) dependsOn(":nativeBuild")
 }

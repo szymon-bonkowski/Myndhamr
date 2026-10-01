@@ -14,6 +14,7 @@ kotlin {
         namespace = "io.github.szymonbonkowski.myndhamr.domain"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
+        withHostTest {}
 
         compilerOptions {
             jvmTarget = JvmTarget.JVM_11

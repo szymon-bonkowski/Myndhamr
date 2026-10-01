@@ -1,0 +1,14 @@
+syntax = "proto3";
+package myndhamr.scan.v1;
+option java_package = "io.github.szymonbonkowski.myndhamr.scan.v1";
+option java_multiple_files = true;
+
+// Toolchain probe, not the v0.1 scan manifest. Tags are permanent within v1.
+message FoundationRecord {
+  uint32 format_version = 1;
+  string project_id = 2;
+  // Original source clock nanoseconds; this probe performs no conversion.
+  int64 source_timestamp_ns = 3;
+  bytes evidence = 4;
+  repeated uint64 sample_ids = 5;
+}
