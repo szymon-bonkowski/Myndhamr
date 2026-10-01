@@ -110,6 +110,8 @@ private object Inspector {
         val manifest = report.manifest
         val depth = linkedMapOf<String, Long>()
         val confidence = linkedMapOf<String, Long>()
+        val confidenceAvailability = linkedMapOf<String,Long>()
+        val representativeDepth=linkedMapOf<String,Any?>()
         val tracking = linkedMapOf<String, Long>()
         val intrinsics = linkedMapOf<String, Any?>()
         val pose = linkedMapOf<String, Any?>()
@@ -149,6 +151,8 @@ private object Inspector {
                 val key = "${d.source.name}:${d.availability.name}"
                 depth.bump(key)
                 if (d.hasConfidence()) confidence.bump(d.source.name)
+                confidenceAvailability.bump("${d.source.name}:${d.confidenceAvailability.name}")
+                if(d.availability==DepthAvailability.AVAILABLE && !representativeDepth.containsKey(d.source.name))representativeDepth[d.source.name]=depthJson(d)
                 if (d.availability == DepthAvailability.AVAILABLE && d.hasTimestamp()) {
                     val deltaKey = "${frame.arTimestamp.clockDomain}->${d.timestamp.clockDomain}:${d.source.name}"
                     if (deltaKey in depthObservedDeltaByClockPair || depthObservedDeltaByClockPair.size < MAX_DIAGNOSTIC_KEYS) {
@@ -244,7 +248,8 @@ private object Inspector {
                 "trackedFrames" to report.trackedFrames, "poses" to poses,
                 "cameraObservations" to report.cameraObservations, "events" to report.events),
             "tracking" to tracking,
-            "depth" to linkedMapOf("availabilityBySource" to depth, "confidenceAssetsBySource" to confidence,
+            "depth" to linkedMapOf("availabilityBySource" to depth, "confidenceAssetsBySource" to confidence, "confidenceAvailabilityBySource" to confidenceAvailability,
+                "representativeCalibrationBySource" to representativeDepth,
                 "observedDepthMinusArNsByClockPair" to depthObservedDeltaByClockPair.mapValues { (_, stats) ->
                     linkedMapOf("mapping" to "unverified", "deltaNs" to stats.json())
                 }, "omittedClockPairs" to omittedDepthClockPairs,
@@ -352,15 +357,27 @@ private fun cameraJson(c: CameraObservation) = mapOf("timestamp" to if (c.hasTim
     "frameNumber" to c.frameNumber.toString(), "timestampSource" to c.timestampSource, "physicalCameraId" to c.physicalCameraId,
     "logicalCameraId" to c.logicalCameraId, "exposureNs" to if (c.hasExposureNs()) c.exposureNs.toString() else null,
     "iso" to if (c.hasIso()) c.iso else null, "intrinsicCalibration" to c.intrinsicCalibrationList,
-    "lensDistortion" to c.lensDistortionList, "cropRegion" to c.cropRegionList)
+    "lensDistortion" to c.lensDistortionList, "cropRegion" to c.cropRegionList,
+    "focalMm" to if(c.hasFocalMm())c.focalMm else null,"rollingShutterNs" to if(c.hasRollingShutterNs())c.rollingShutterNs.toString() else null,
+    "sensorOrientationDegrees" to if(c.hasSensorOrientationDegrees())c.sensorOrientationDegrees else null,
+    "colorGains" to c.colorGainsList,"lensPoseTranslation" to c.lensPoseTranslationList,"lensPoseRotation" to c.lensPoseRotationList)
 private fun frameJson(f: CaptureFrame) = mapOf("frameId" to f.frameId.toString(), "arTimestamp" to timestampJson(f.arTimestamp),
     "cameraTimestamp" to if (f.hasCameraTimestamp()) timestampJson(f.cameraTimestamp) else null,
     "imageTimestamp" to if (f.hasImageTimestamp()) timestampJson(f.imageTimestamp) else null,
     "trackingState" to f.trackingState.name, "poseColumnMajor" to if (f.hasPose()) f.pose.columnMajorList else null,
     "intrinsics" to intrinsicsJson(f.intrinsics), "keyframe" to f.keyframe, "camera" to if (f.hasCamera()) cameraJson(f.camera) else null,
-    "depth" to f.depthList.map { mapOf("source" to it.source.name, "availability" to it.availability.name,
-        "timestamp" to if (it.hasTimestamp()) timestampJson(it.timestamp) else null, "confidence" to it.hasConfidence(), "detail" to it.detail) },
+    "depth" to f.depthList.map(::depthJson),
+    "projectionColumnMajor" to f.projectionColumnMajorList,"projectionConvention" to f.projectionConvention,
+    "displayRotation" to if(f.hasDisplayRotation())f.displayRotation else null,
+    "imageWidth" to f.imageWidth,"imageHeight" to f.imageHeight,"imageFormat" to f.imageFormat,
     "rgb" to if (f.hasRgb()) assetJson(f.rgb) else null, "failureReason" to f.failureReason)
+private fun depthJson(d:DepthRecord)=mapOf("source" to d.source.name,"availability" to d.availability.name,
+    "timestamp" to if(d.hasTimestamp())timestampJson(d.timestamp) else null,"width" to d.width,"height" to d.height,
+    "intrinsics" to if(d.hasIntrinsics())intrinsicsJson(d.intrinsics) else null,"unitMeters" to d.unitMeters,
+    "cpuToDepthColumnMajor" to d.cpuToDepthColumnMajorList,"mappingConvention" to d.mappingConvention,"alignment" to d.alignment,
+    "depthAsset" to if(d.hasDepth())assetJson(d.depth) else null,"confidenceAsset" to if(d.hasConfidence())assetJson(d.confidence) else null,
+    "confidenceAvailability" to d.confidenceAvailability.name,"confidenceTimestamp" to if(d.hasConfidenceTimestamp())timestampJson(d.confidenceTimestamp) else null,
+    "assetOmittedByPolicy" to d.assetOmittedByPolicy,"detail" to d.detail)
 private fun imuJson(i: ImuSample) = mapOf("type" to i.type, "timestamp" to timestampJson(i.timestamp), "values" to i.valuesList, "accuracy" to i.accuracy)
 private fun eventJson(e: SessionEvent) = mapOf("type" to e.type, "timestamp" to timestampJson(e.timestamp), "detail" to e.detail)
 private fun reportJson(r: ValidationReport) = mapOf("valid" to r.valid, "frames" to r.frames, "keyframes" to r.keyframes,

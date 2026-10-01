@@ -35,3 +35,5 @@ include(":androidApp")
 include(":desktopApp")
 include(":shared")
 include(":shared:domain", ":shared:scan-format")
+
+include(":shared:project-store")

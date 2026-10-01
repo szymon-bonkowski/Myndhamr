@@ -62,6 +62,11 @@ message DepthRecord {
   string detail = 11;
   // Explicit storage policy: metadata retained while this non-keyframe estimate is not saved.
   bool asset_omitted_by_policy = 12;
+  // H_depthPixels_cpuImagePixels, column vectors, column-major3x3, measured via ARCore.
+  repeated double cpu_to_depth_column_major = 13;
+  string mapping_convention = 14;
+  DepthAvailability confidence_availability = 15;
+  Timestamp confidence_timestamp = 16;
 }
 message CameraObservation {
   Timestamp timestamp = 1;
@@ -100,6 +105,8 @@ message CaptureFrame {
   repeated double projection_column_major = 16;
   optional double projection_near_meters = 17;
   optional double projection_far_meters = 18;
+  string projection_convention = 19;
+  optional int32 display_rotation = 20;
 }
 message ImuSample {
   string type = 1;

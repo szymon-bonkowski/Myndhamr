@@ -66,6 +66,15 @@ object CaptureValidation {
                 require(depth.hasDepth() || depth.assetOmittedByPolicy && !value.keyframe) { "Available depth lacks asset or explicit non-keyframe omission policy" }
                 require(!depth.hasDepth() || !depth.assetOmittedByPolicy) { "Contradictory depth omission policy" }
                 timestamp(depth.timestamp); intrinsics(depth.intrinsics)
+                if(depth.cpuToDepthColumnMajorCount>0) {
+                    val h=depth.cpuToDepthColumnMajorList
+                    require(h.size==9 && h.all { it.isFinite() } && depth.mappingConvention.isNotBlank()) { "Invalid CPU/depth pixel mapping" }
+                    require(abs(h[2])<1e-8 && abs(h[5])<1e-8 && abs(h[8]-1.0)<1e-8 && abs(h[0]*h[4]-h[3]*h[1])>1e-12) { "Degenerate depth mapping" }
+                }
+                if(depth.hasConfidenceTimestamp()) timestamp(depth.confidenceTimestamp)
+                if(depth.intrinsics.model=="ARCORE_DEPTH_SCALED_TEXTURE_PINHOLE") require(depth.cpuToDepthColumnMajorCount==9) { "Depth texture view requires crop mapping" }
+                if(depth.hasDepth() && depth.depth.encoding=="U16_LE;millimeters;axial-Z") require(depth.depth.size==depth.width.toLong()*depth.height.toLong()*2) { "Depth asset dimensions mismatch" }
+                if(depth.hasConfidence() && depth.confidence.encoding=="U8;0-invalid;255-highest") require(depth.confidence.size==depth.width.toLong()*depth.height.toLong()) { "Confidence asset dimensions mismatch" }
                 require(depth.width == depth.intrinsics.width && depth.height == depth.intrinsics.height)
                 require(depth.unitMeters.isFinite() && depth.unitMeters > 0)
             } else require(!depth.hasDepth() && !depth.hasConfidence()) { "Unavailable depth has assets" }

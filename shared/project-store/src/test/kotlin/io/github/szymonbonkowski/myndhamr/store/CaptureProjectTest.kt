@@ -74,9 +74,26 @@ class CaptureProjectTest {
     @Test fun metadataOnlyDepthIsExplicitAndLimitedToNonKeyframes() {
         val depth = DepthRecord.newBuilder().setSource(DepthSource.ARCORE_RAW).setAvailability(DepthAvailability.AVAILABLE)
             .setTimestamp(timestamp()).setIntrinsics(intrinsics()).setWidth(640).setHeight(480)
-            .setUnitMeters(.001).setAlignment("ARCore same optical view, scaled intrinsics").setAssetOmittedByPolicy(true)
+            .setUnitMeters(.001).setAlignment("synthetic uniform aligned optical view").setAssetOmittedByPolicy(true)
         CaptureValidation.frame(frame().toBuilder().clearDepth().addDepth(depth).build())
         assertFailsWith<IllegalArgumentException> { CaptureValidation.frame(frame().toBuilder().clearDepth().addDepth(depth.clearAssetOmittedByPolicy()).build()) }
+    }
+
+    @Test fun cropMappingAndConfidenceTimestampsRoundtripAndRejectMalformedCalibration() {
+        val root=directory()
+        val d=DepthRecord.newBuilder().setSource(DepthSource.ARCORE_RAW).setAvailability(DepthAvailability.AVAILABLE)
+            .setTimestamp(timestamp(123)).setConfidenceTimestamp(timestamp(124)).setConfidenceAvailability(DepthAvailability.AVAILABLE)
+            .setIntrinsics(intrinsics().toBuilder().setWidth(160).setHeight(90).setModel("ARCORE_DEPTH_SCALED_TEXTURE_PINHOLE"))
+            .setWidth(160).setHeight(90).setUnitMeters(.001).setAlignment("ARCore depth texture crop")
+            .addAllCpuToDepthColumnMajor(listOf(.25,0.0,0.0,0.0,.25,0.0,0.0,-15.0,1.0))
+            .setMappingConvention("H_depthPixels_cpuImagePixels;column-major3x3").setAssetOmittedByPolicy(true).build()
+        val f=frame().toBuilder().clearDepth().addDepth(d).build()
+        CaptureProject.create(root,manifest()).use { it.appendFrame(f);it.finish(200,CaptureState.COMPLETED) }
+        var decoded:CaptureFrame?=null;CaptureProject.visitFrames(root) { decoded=it }
+        assertEquals(f,decoded)
+        assertFails { CaptureValidation.frame(f.toBuilder().setDepth(0,d.toBuilder().clearCpuToDepthColumnMajor()).build()) }
+        assertFails { CaptureValidation.frame(f.toBuilder().setDepth(0,d.toBuilder().setCpuToDepthColumnMajor(0,Double.NaN)).build()) }
+        assertFails { CaptureValidation.frame(f.toBuilder().setDepth(0,d.toBuilder().setCpuToDepthColumnMajor(0,0.0)).build()) }
     }
 
     @Test fun interruptedTailRecoveryPreservesPrefixAndTail() {

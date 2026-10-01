@@ -35,15 +35,22 @@ FetchContent_Declare(protobuf
   DOWNLOAD_EXTRACT_TIMESTAMP FALSE)
 FetchContent_MakeAvailable(protobuf)
 set(PROTO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../shared/scan-format/src/main/proto")
-set(PROTO_REL myndhamr/scan/v1/foundation.proto)
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED}")
-add_custom_command(
-  OUTPUT "${GENERATED}/myndhamr/scan/v1/foundation.pb.cc" "${GENERATED}/myndhamr/scan/v1/foundation.pb.h"
-  COMMAND protobuf::protoc --proto_path=${PROTO_ROOT} --cpp_out=${GENERATED} ${PROTO_ROOT}/${PROTO_REL}
-  DEPENDS protobuf::protoc "${PROTO_ROOT}/${PROTO_REL}"
-  VERBATIM)
-add_library(myndhamr_schema STATIC "${GENERATED}/myndhamr/scan/v1/foundation.pb.cc")
+file(GLOB_RECURSE PROTO_FILES CONFIGURE_DEPENDS "${PROTO_ROOT}/*.proto")
+set(GENERATED_SOURCES)
+foreach(PROTO_FILE IN LISTS PROTO_FILES)
+  file(RELATIVE_PATH PROTO_REL "${PROTO_ROOT}" "${PROTO_FILE}")
+  string(REGEX REPLACE "\\.proto$" ".pb.cc" PROTO_CC "${PROTO_REL}")
+  string(REGEX REPLACE "\\.proto$" ".pb.h" PROTO_H "${PROTO_REL}")
+  add_custom_command(
+    OUTPUT "${GENERATED}/${PROTO_CC}" "${GENERATED}/${PROTO_H}"
+    COMMAND protobuf::protoc --proto_path=${PROTO_ROOT} --cpp_out=${GENERATED} ${PROTO_FILE}
+    DEPENDS protobuf::protoc "${PROTO_FILE}"
+    VERBATIM)
+  list(APPEND GENERATED_SOURCES "${GENERATED}/${PROTO_CC}")
+endforeach()
+add_library(myndhamr_schema STATIC ${GENERATED_SOURCES})
 target_include_directories(myndhamr_schema SYSTEM PUBLIC "${GENERATED}")
 target_link_libraries(myndhamr_schema PUBLIC protobuf::libprotobuf)
 add_library(myndhamr_core STATIC core/src/foundation.cpp)

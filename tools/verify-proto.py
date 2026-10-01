@@ -7,13 +7,13 @@ import tempfile
 root = pathlib.Path(__file__).resolve().parent.parent
 protoc = root / 'build/native/_deps/protobuf-build/protoc'
 source = root / 'shared/scan-format/src/main/proto'
-proto = source / 'myndhamr/scan/v1/foundation.proto'
+protos = sorted(source.rglob('*.proto'))
 with tempfile.TemporaryDirectory() as tmp:
     for run in ('a', 'b'):
         out = pathlib.Path(tmp) / run
         out.mkdir()
         subprocess.run([str(protoc), f'--proto_path={source}', f'--java_out={out}',
-                        f'--cpp_out={out}', str(proto)], check=True)
+                        f'--cpp_out={out}', *map(str, protos)], check=True)
     a, b = (pathlib.Path(tmp) / run for run in ('a', 'b'))
     java_root = root / 'shared/scan-format/build/generated/source/proto/main/java'
     cpp_root = root / 'build/native/generated'
