@@ -1,7 +1,7 @@
 # Reproducible v0.0 research harness
 
 ## Status
-Active
+Completed
 
 ## Purpose and user-visible outcome
 Android and a desktop CLI build from this repository, share a UI-independent KMP domain foundation, and exchange a versioned representative Protobuf message through real JNI/C++ bindings. Native tests, fixtures, benchmarks and CI establish reproducible foundations for later capture work.
@@ -67,9 +67,10 @@ Primary owns architecture, native/schema/JNI and integration review. Luna high h
 - [x] M1 baseline/domain/CLI — baseline Android/shared tests and integrated domain/CLI tests pass.
 - [x] M2 native/schema/JNI — host CTest, four JVM JNI tests, golden wire test and independent Java/C++ regeneration pass.
 - [x] M3 Android/device — APK/test APK and both JNI ABIs build; lint clean; standalone native tests and benchmark executed successfully on arm64 Android 15. Phone rejects APK installation with INSTALL_FAILED_USER_RESTRICTED, so physical-device instrumented JNI is not executed; CI emulator gate remains required.
-- [ ] M4 fixtures/benchmark/inventory/CI
+- [x] M4 fixtures/benchmark/inventory/CI — local validation and fresh GitHub Actions workflow passed, including 2/2 API 35 emulator JNI tests plus x86_64 native tests/benchmark.
 
 ## Decisions made during implementation
+Generation tracks source schemas, compiler/pin and generator script; owned output is recreated to remove obsolete classes. CMake requires >=3.24 and extracted dependency timestamps use build-time values so upgrades rebuild dependents. Strict Android executed-test-count validation prevents an instrumentation startup failure from looking successful.
 Retain existing app paths; introduce useful boundaries rather than wholesale monorepo path migration. Preserve iOS/shared UI templates. Replace generated desktop GUI with headless harness per explicit v0.0 request. Generated wire types are JVM/Android initially; pure domain supports iOS.
 
 ## Discoveries
@@ -77,7 +78,7 @@ AndroidX ext-junit supplies the JUnit adapter but not AndroidJUnitRunner itself.
 Baseline metadata had negative timestamps on several checkout directories; repaired metadata and baseline Android/shared tests passed. Android Studio JBR has no JNI headers; Gradle nativeConfigure uses the full daemon JDK. Protobuf 36.2/Java 4.36.2 with Abseil 20250512.1 and bundled utf8_range selected from verified upstream release/source; source archive hashes pin downloads.
 
 ## Final validation
-Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android APK/test APK/lint passed; shared/domain Android host tests passed; standalone Android native test and benchmark passed (1000 round trips/checksum 38000). Phone instrumentation produced zero tests despite Gradle success; direct adb install confirmed INSTALL_FAILED_USER_RESTRICTED. Added explicit executed-test-count check. First remote fresh host/Android build passed; strict emulator gate caught a missing AndroidJUnitRunner runtime dependency. Added explicit test-only runner 1.7.0. Local x86_64 API 37.1 emulator now executes both JNI tests successfully. Remote API 35 rerun pending.
+Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:shared:domain:jvmTest :desktopApp:test`; CMake host Release build/CTest; `nativeTest :shared:scan-format:test verifyProtoGeneration benchmarkSmoke` all pass. Benchmark initial host smoke: 1000 round trips, checksum 38000; timing is diagnostic only. Android APK/test APK/lint passed; shared/domain Android host tests passed; standalone Android native test and benchmark passed (1000 round trips/checksum 38000). Phone instrumentation produced zero tests despite Gradle success; direct adb install confirmed INSTALL_FAILED_USER_RESTRICTED. Added explicit executed-test-count check. First remote fresh host/Android build passed; strict emulator gate caught a missing AndroidJUnitRunner runtime dependency. Added explicit test-only runner 1.7.0. Local x86_64 API 37.1 emulator now executes both JNI tests successfully. Corrected full remote run passed on API 35, including 2/2 JNI tests and standalone x86_64 native tests/benchmark. Run: https://github.com/szymon-bonkowski/Myndhamr/actions/runs/36798401898 (implementation commit a0559d2).
 
 ## Acceptance record
 | Requirement | Status / evidence |
@@ -95,9 +96,15 @@ Executed: baseline `:shared:jvmTest :androidApp:assembleDebug`; integrated `:sha
 | Golden/synthetic fixtures | Pass: reviewed wire fixture with exact integer/raw bytes |
 | Local CI equivalent | Pass: tools/validate.sh incl. Android host tests and lint |
 | Dependency/license check | Pass: catalog/pins/license inventory checker; complete transitive shipping audit deferred |
-| Remote CI and emulator JNI | Fresh remote build passed; local API 37.1 emulator JNI 2/2 pass; corrected full CI rerun pending |
+| Remote CI and emulator JNI | Pass: full GitHub Actions run 36798401898; API 35 x86_64 emulator JNI 2/2 and native tests/benchmark |
 | Physical-device instrumented JNI | Not executed: INSTALL_FAILED_USER_RESTRICTED; zero tests detected explicitly |
 | iOS build/tests | Not executed: Linux lacks Xcode/macOS; iOS targets/shell preserved |
 
 ## Outcome
-Pending remote CI gate. All local applicable requirements passed; no v0.1 behavior implemented.
+Completed v0.0: UI-independent KMP domain, headless JVM CLI, C++20 host/NDK core, owned-buffer JNI bridge, versioned generated Protobuf framework, synthetic golden fixtures, reproducible generation, smoke benchmarks, dependency/license inventory, developer commands and CI. All attainable acceptance criteria passed locally and in a fresh remote build. No capture/reconstruction/networking or other v0.1 behavior was added.
+
+Important decisions: preserve existing app/UI paths and shells; isolate pure domain and generated wire ownership; build host protoc from the same pinned source as the C++ runtime; use coarse copied byte calls with explicit failure and resource bounds; retain unknown fields and original timestamps/evidence. Generated bindings currently support JVM/Android; iOS wire integration stays with the iOS milestone, while existing iOS app and KMP targets remain available.
+
+Validation limits: physical phone refuses APK installation, so physical-device instrumented JNI was not executed. Physical Android native tests passed; local API 37.1 and remote API 35 emulator JNI tests passed. iOS compilation/tests were not executed because this host is Linux. The direct dependency inventory passes; a complete transitive/distribution notice audit remains a release responsibility.
+
+Implementation commits: f116a71, 04c3c6a, c7979c1, ae97fca, 8e6127b, f9789eb, a0559d2. The closure commit updates this plan only and skips a redundant CI run after the implementation passed. Temporary worker checkouts and the task-created local AVD were removed. Next milestone: v0.1 Capture Recorder, with its own specification and ExecPlan.
