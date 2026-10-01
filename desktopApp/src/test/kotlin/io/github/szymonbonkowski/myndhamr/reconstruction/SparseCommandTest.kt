@@ -47,9 +47,20 @@ class SparseCommandTest {
                 SparseCommand.runProcess(listOf("sh","-c","sh -c 'trap \"\" TERM; echo $$; exec sleep 30' & wait"),log,1)
             }
             val pid=log.readText().trim().toLong()
-            // A killed reparented process may briefly remain a zombie on Linux.
+            // destroyForcibly requests SIGKILL; delivery is asynchronous. CI
+            // observed the child runnable with SIGKILL pending immediately after
+            // return. Require quiescence within a bound, accepting a zombie that
+            // cannot execute while the init process has not reaped it yet.
             val proc=File("/proc/$pid/stat")
-            if(proc.exists()) assertContains(proc.readText(),") Z ")
+            var lastState: String?=null
+            fun running(): Boolean {
+                if(!proc.exists()) return false
+                return try { val state=proc.readText(); lastState=state; !state.contains(") Z ") }
+                catch(e:java.io.FileNotFoundException) { false } // Reaped between exists/read.
+            }
+            val deadline=System.nanoTime()+3_000_000_000L
+            while(running() && System.nanoTime()<deadline) Thread.sleep(10)
+            assertFalse(running(),"TERM-ignoring descendant must stop after timeout; last state: $lastState")
         }finally{root.deleteRecursively()}
     }
 
