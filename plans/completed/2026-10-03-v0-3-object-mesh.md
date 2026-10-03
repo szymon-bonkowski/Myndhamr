@@ -1,7 +1,7 @@
 # Reproducible metric object meshes from v1 captures
 
 ## Status
-Active
+Complete — 2026-10-03
 
 ## Purpose and user-visible outcome
 One desktop command validates a scan, reuses or builds its v0.2 sparse reconstruction, runs COLMAP dense stereo/fusion, reconstructs a conservative observed surface and exports independently readable PLY/OBJ/GLB meshes with metric diagnostics.
@@ -16,10 +16,10 @@ No capture changes, guided selection, texturing, room TSDF, generative closure, 
 Clean main at 2090e04 includes completed v0.2. SparseCommand owns ingest and isolated workers. colmap/models/component-001 is the registered arbitrary-scale model; aligned-model.json schema 1 supplies capture-world metric Sim(3). Final real reference is build/acceptance/v02-real-capture-20261002/controlled-capture/final-run: 68/68 registered, 5118 points, scale 0.1309895682. Original scan is controlled-capture/data. Baseline tools/validate.sh passed, controlled sparse 10/10 and 4675 points on 2026-10-03. CPU pycolmap 3.13 lacks CUDA; RTX 5070 is available, a separate pinned dense runtime is being provisioned.
 
 ## Contracts and invariants
-Existing raw/sparse artifacts are read-only. New object run is outside source and sparse directories. Version 1 derived manifest records source/input hashes, versions, configuration, runtime, outputs, failures. Full content/config/backend/code hashes qualify cache reuse; stale output must fail with a new-directory instruction. Completed stages have hashes, incomplete stages may be retried without claiming valid cache. Input aligned status, proper finite positive Sim(3), registered cameras and source calibration/images must agree. No arbitrary image-count cap.
+Existing raw/sparse artifacts are read-only. New object run is outside source and sparse directories. Version 1 derived manifest records source/input hashes, versions, configuration, runtime, outputs, failures. Input/config/backend/worker hashes qualify cache reuse; incompatible identities fail with a new-directory instruction. Stage implementation hashes allow compatible downstream module updates with recorded history and audited invalidation. Completed stages have hashes, incomplete stages may be retried without claiming valid cache. Input aligned status, proper finite positive Sim(3), registered cameras and source calibration/images must agree. No arbitrary image-count cap.
 
 ## Mathematics / algorithm
-Column vectors. Capture-world right-handed metres, +Y up; COLMAP optical camera +X right/+Y down/+Z forward. Dense backend stays in original SfM coordinates, then exactly once p_world=s R_world_sfm p_sfm+t_world_sfm; normals n_world=R_world_sfm n_sfm, unit normalized. R must have determinant +1. PLY/OBJ/GLB store this world frame directly with no recenter, root transform, scale compensation or axis flip; glTF is right-handed +Y up/metres. GLB float32 error tested relative to coordinate magnitude.
+Column vectors. Capture-world right-handed metres, +Y up; COLMAP optical camera +X right/+Y down/+Z forward. Dense backend stays in original SfM coordinates, then exactly once p_world=s R_world_sfm p_sfm+t_world_sfm; normals n_world=R_world_sfm n_sfm, unit normalized. R must have determinant +1. PLY/OBJ/GLB store this world frame directly with no recenter, nonidentity root transform, scale compensation or axis flip; glTF is right-handed +Y up/metres. GLB float32 error tested relative to coordinate magnitude.
 COLMAP undistortion -> geometrically consistent PatchMatch -> stereo fusion. Open3D ball pivoting uses measured point normals, radii in metres explicitly configured; triangles bridging above maximum edge are rejected. No extrapolated Poisson envelope. Exact duplicate vertices/faces and zero-area faces removed; invalid/nonfinite/index input fails. All components retained by default; optional minimum face threshold requires explicit config and records each removal. Area-weighted vertex normals derive from preserved winding; orientation conflicts, zero normal vertices and boundaries are reported. No arbitrary global flip. Degenerate tolerance scales with bounding diagonal.
 
 ## Implementation map
@@ -61,11 +61,11 @@ CUDA wheel/GPU architecture compatibility: verify real execution early. Ball piv
 Primary Sol high owns contracts, integration, diagnosis and review; escalate numerical reasoning as needed. Luna high read-only baseline explorer and exporter worker receive bounded interfaces. Sol high geometry worker handles local edge cases. Workers have non-overlapping files; primary reviews changes, owns final acceptance/commits.
 
 ## Progress
-- [x] M1 baseline regression and real-artifact inspection (CUDA probe pending).
-- [ ] M2 geometry and exports.
-- [ ] M3 dense adapter/CLI/checkpoints.
-- [ ] M4 controlled and real acceptance/resources.
-- [ ] M5 final regressions/CI/clean closure.
+- [x] M1 baseline regression, real-artifact inspection and CUDA execution.
+- [x] M2 geometry and exports.
+- [x] M3 dense adapter/CLI/checkpoints.
+- [x] M4 controlled and real acceptance/resources.
+- [x] M5 final regressions, independent export acceptance, remote CI and documented closure.
 
 ## Decisions made during implementation
 Use COLMAP dense plus Open3D ball pivoting instead of unsupported closure. Keep approved sparse pycolmap CPU runtime distinct from pinned dense CUDA runtime. Preserve all components by default, permitting explicit audited face threshold.
@@ -74,10 +74,24 @@ Use COLMAP dense plus Open3D ball pivoting instead of unsupported closure. Keep 
 Existing successful real dataset includes the floor; v0.3 has no segmentation requirement, so the observation-supported surroundings remain part of output.
 
 ## Final validation
-Pending implementation and recorded measurements.
+Final GPU controlled scan-to-mesh command (no manually supplied sparse) passed in build/v03-controlled-final: 10 registered views, 71,131 dense points, 46,047 vertices, 64,924 triangles, 1,094 components. Dimensions 4.8329170773 × 3.6702923009 × 1.2489509275m. Known-plane residual median 1.938mm, p95 7.627mm; >1m known depth span preserved. Dense 128.372s, mesh 2.333s, export 0.448s, initial peak RSS 847,675,392B, initial artifacts 149,264,055B.
+
+Final real command reused the accepted v0.2 sparse through the public object workflow: build/v03-real-final-full. Backpack capture ID10ff175e-1ee9-4583-ac88-ce95c700c790, 68/68 views, 5,118 sparse points. Dense 331,345 points; final 202,621 vertices, 348,412 triangles, 3,162 components. Bounds dimensions 3.4606054282 × 0.8750737608 × 4.3057631445m include measured background/floor. Area 2.6896245532m²; 55,328 boundary edges allowed. Zero degenerate triangles, nonmanifold edges/vertices, winding conflicts, undefined or nonunit normals. Cleanup removes 139,131 unreferenced cloud points, zero triangles and zero components. 688 conflicting native edges require seams: 1,252 faces isolated, 6,976 fan splits, 10,732 new seam vertices; 325 superseded originals unreferenced. Every triangle corner/winding/order and area preserved, no flip/move/delete.
+
+Real dense 623.796s (undistort1.074, stereo600.829, fusion21.394), mesh54.575s, export2.032s; initial process peak RSS1,474,867,200B, initial artifacts871,575,891B. First-run diagnostics saved separately because retries report their own process high-water memory; later log growth increases directory bytes. Export bytes: PLY32,549,944; OBJ41,331,287; GLB9,044,912. Independent trimesh geometry and Open3D stored-normal parsing pass all formats. PLY/OBJ positional error0; GLB max1.1896262e-7m. Dense Sim(3) forward/inverse checks pass; every mesh vertex is exactly a dense observation (support distance0). Khronos2.0.0-dev.3.10 validates both GLBs with0errors/0warnings, one harmless NODE_MATRIX_DEFAULT info.
+
+Raw277files and sparse305files pre/post SHA256 match (582 total). Actual repeated full object command completes in3.172s and reuses dense/mesh/export; mesh-validate independently rechecks hashes/topology/scale. Browser inspection of final offline HTML shows upright object, floor/background and open measured patches; yaw/pitch/zoom/wire controls work. Observed-corner overlay makes the sampled fine triangles readable, without changing stored geometry. Screenshot saved with durable evidence.
+
+Final local tools/validate.sh passes (build/v03-final-all-regression.log): desktop30, shared98, Android host17 tests with0failures/errors/skips, including all prior regressions, native2/2, sparse known-answer acceptance10/10, and object52/52 in fresh pinned CPU runtime. GPU runtime independently passed geometry/adapter suite; actual controlled and real stereo are GPU acceptance, not mocked CI. Plane benchmark6,561vertices/12,800triangles/0.5m²: validation~0.35s, cleanup/normals~0.16s, loading~0.0005s, all exports~0.058s. Linux iOS simulator execution is unavailable and unchanged; no v0.3 iOS path claimed.
+
+Remote CI [37133878420](https://github.com/szymon-bonkowski/Myndhamr/actions/runs/37133878420) passed on final executable revision dfe39ba578eb65c5fad207dc9c50ecdb242ecd90. Downloaded24XML suites: shared98, desktop30, Android host17 tests, zero failures/errors/skips. Log and instrumentation HTML confirm2executed JNI tests without failures/skips; Android native semantic/unknown-field/determinism/rejection tests and benchmark execute successfully on API35 x86_64 emulator. Native host2/2 and Python object52/52 pass; controlled sparse10/10 with4674points. Remote plane benchmark validation0.657s/cleanupNormals0.300s/load0.00081s/exportAll0.110s. Durable acceptance is saved under /home/boniek/Documents/Myndhamr/acceptance/v0.3/2026-10-03-backpack; large data remain outside Git.
 
 ## Outcome
-Pending; do not declare completion before gates pass.
+v0.3 Object Mesh MVP is complete. The public single-command scan workflow builds/reuses validated sparse inputs and produces audited dense, conservative open mesh and PLY/OBJ/GLB outputs in the inherited metric world frame. Controlled and real GPU reconstruction, independent geometry/normal/schema acceptance, source immutability, resume, all local regression suites and remote emulator CI passed. All applicable milestones satisfy their observable criteria.
+
+Implementation commits:49b620d (dense/geometry/CLI/export foundation),8b69093 (CPU capability regression/Khronos tooling),18a0fbb (stored-normal oracle regression),dfe39ba (readable offline inspector). A final documentation-only completion commit moves this plan; executable code remains identical to the green CI revision. Existing v0.0–v0.2 history and raw/sparse data are preserved; no release or history rewrite.
+
+Limits are explicit: CUDA is needed for the selected dense backend; observed background, holes, disconnected patches and orientation seams remain; no production textures, segmentation, generative closure or independently measured physical backpack ground truth. External GPU stereo/fusion is not promised bitwise determinism. Linux iOS simulator tests are unavailable and not claimed as executed. No unresolved software defect or external blocker remains within v0.3. Next milestone is v0.4 guided capture.
 
 ### 2026-10-03 — Blackwell dense backend fix
 COLMAP3.13 CUDA actual controlled PatchMatch produced 0 geometric valid depth pixels/fused points, despite passing sparse. RTX5070 matches upstream [Blackwell kernel compiler bug #4213](https://github.com/colmap/colmap/pull/4213). Upgrade only separate object runtime to pinned4.2.1 with upstream workaround; v0.2 stays3.13. Keep failed probe and interrupted real attempt in ignored build directories. No thresholds relaxed to hide failure. Open3D0.20 is required for host Python3.14; use0.20 consistently in CI.
@@ -93,3 +107,6 @@ Independent parity diagnosis found17 nonorientable components, including the mai
 Stage-specific implementation hashes now preserve valid expensive dense outputs across downstream geometry/export module changes; input/config/worker/backend mismatches still fail. Dense compatibility includes transitive transform helper source. Stale downstream outputs are archived and rebuilt, validation refuses stale dependencies; tests added. Final dense run build/v03-real-current uses stable worker/resource configuration; all geometry changes afterward are handled by this tested dependency boundary.
 
 Final local CI-equivalent tools/validate.sh passed on implementation49b620d (49object tests at that point). Fresh CPU environment exposed a test capability assumption in partial-native-workspace regression; mock CUDA capability for that isolated native-call test and add an explicit no-CUDA failure/checkpoint test. Fresh CPU50/50 and benchmark pass; production worker unchanged, current final GPU jobs remain valid. Independent Khronos GLB validator pinned2.0.0-dev.3.10 is an optional test tool for final outputs.
+
+### 2026-10-03 — independent normal oracle and inspector verification
+Independent acceptance originally used trimesh recomputed angle-weighted normals for PLY/glTF, differing from deliberately stored area-weighted normals. Use Open3D stored corner-normal parsing, accounting for Assimp float representation/reordering, while trimesh checks exact geometry/winding. Asymmetric tetra fixture accepts correct stored normals and rejects mutated PLY normals (52 tests total). Installed Khronos validator license verified Apache-2.0 and inventory corrected. Initial browser inspection found sparse sampled triangle visibility poor; increase zoom range/default and overlay sampled observed corners. No export/geometry change. Native stereo/fusion has non-bitwise variation across independent GPU runs: interim328,628 points versus final331,345. Version/config/source/output hashes provide provenance; do not claim bitwise reproducibility for external GPU stereo.
