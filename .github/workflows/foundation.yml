@@ -1,4 +1,4 @@
-name: v0.0–v0.2 capture and sparse reconstruction
+name: v0.0–v0.3 capture, sparse and object mesh
 on:
   push:
   pull_request:
@@ -23,6 +23,8 @@ jobs:
           packages: platform-tools
       - name: Install pinned Android toolchains
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.30.5'
+      - name: Native geometry worker runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libgomp1
       - name: Host, JVM, Android, goldens, generation and benchmark
         run: tools/validate.sh
       - name: Enable KVM access

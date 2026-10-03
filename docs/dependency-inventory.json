@@ -335,6 +335,46 @@
       "status": "used",
       "source": "desktop-workers/colmap-adapter/requirements.txt",
       "license_url": "https://github.com/python-pillow/Pillow/blob/11.3.0/LICENSE"
+    },
+    {
+      "name": "Open3D desktop surface geometry",
+      "coordinate": "open3d",
+      "version": "0.20.0",
+      "license": "MIT",
+      "scope": "production",
+      "status": "used",
+      "source": "desktop-workers/object-mesh/requirements.txt",
+      "license_url": "https://github.com/isl-org/Open3D/blob/v0.20.0/LICENSE"
+    },
+    {
+      "name": "COLMAP CUDA dense adapter",
+      "coordinate": "pycolmap-cuda12",
+      "version": "4.2.1",
+      "license": "BSD-3-Clause",
+      "scope": "production",
+      "status": "used",
+      "source": "desktop-workers/object-mesh/requirements-cuda.txt",
+      "license_url": "https://github.com/colmap/colmap/blob/4.2.1/COPYING.txt"
+    },
+    {
+      "name": "Independent mesh parser",
+      "coordinate": "trimesh",
+      "version": "4.7.4",
+      "license": "MIT",
+      "scope": "test",
+      "status": "used",
+      "source": "desktop-workers/object-mesh/requirements-test.txt",
+      "license_url": "https://github.com/mikedh/trimesh/blob/4.7.4/LICENSE.md"
+    },
+    {
+      "name": "COLMAP dense CPU test adapter",
+      "coordinate": "pycolmap",
+      "version": "4.2.1",
+      "license": "BSD-3-Clause",
+      "scope": "test",
+      "status": "used",
+      "source": "desktop-workers/object-mesh/requirements.txt",
+      "license_url": "https://github.com/colmap/colmap/blob/4.2.1/COPYING.txt"
     }
   ],
   "license_policy": {

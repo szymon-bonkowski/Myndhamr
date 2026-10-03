@@ -1,0 +1,5 @@
+# CPU geometry/adapter tests and exporters; dense stereo explicitly needs CUDA.
+pycolmap==4.2.1
+open3d==0.20.0
+numpy==2.4.6
+pillow==11.3.0

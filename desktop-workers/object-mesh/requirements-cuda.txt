@@ -1,0 +1,5 @@
+# Separate CUDA runtime; do not install both pycolmap distributions together.
+pycolmap-cuda12==4.2.1
+open3d==0.20.0
+numpy==2.4.6
+pillow==11.3.0

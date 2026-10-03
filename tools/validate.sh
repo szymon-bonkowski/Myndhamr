@@ -9,3 +9,4 @@ python3 tools/check-inventory.py
 python3 tests/tooling/test_proto_generation.py
 ./gradlew --console=plain :desktopApp:run --args=--help
 tools/validate-sparse.sh
+tools/validate-object.sh

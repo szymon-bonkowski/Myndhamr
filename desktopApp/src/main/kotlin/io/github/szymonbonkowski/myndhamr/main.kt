@@ -12,6 +12,7 @@ import java.math.MathContext
 import java.nio.file.Files
 import java.util.Locale
 import io.github.szymonbonkowski.myndhamr.reconstruction.SparseCommand
+import io.github.szymonbonkowski.myndhamr.reconstruction.ObjectCommand
 
 private const val HELP = """Usage: myndhamr [--help]
        myndhamr inspect <project-directory|package.scan3d>
@@ -19,7 +20,13 @@ private const val HELP = """Usage: myndhamr [--help]
        myndhamr validate <project-directory|package.scan3d>
        myndhamr ingest <scan> <new-run-directory>
        myndhamr reconstruct <scan> <new-run-directory> [--python path] [--timeout-seconds 600] [--pose-threshold-meters 0.05]
+       myndhamr object <scan> <object-run> [--sparse sparse-run] [object options]
+       myndhamr dense|mesh|export <sparse-run> <object-run> [object options]
+       myndhamr mesh-validate <object-run> [--python path] [--repository path]
 
+Object options: --python path --sparse-python path --repository path --timeout-seconds 3600
+                --max-image-size 1600 --radii-meters 0.005,0.01 --max-edge-meters 0.02
+                --min-component-faces 0 --formats ply,obj,glb
 All commands emit JSON. replay emits one JSON object per stored metadata record.
 """
 private const val MAX_DIAGNOSTIC_KEYS = 64
@@ -47,6 +54,7 @@ fun foundationCommand(args: List<String>): String {
 
 internal fun runCli(args: List<String>, stdout: java.io.PrintStream, stderr: java.io.PrintStream): Int {
     if (SparseCommand.handles(args.firstOrNull())) return SparseCommand.run(args, stdout, stderr)
+    if (ObjectCommand.handles(args.firstOrNull())) return ObjectCommand.run(args, stdout, stderr)
     try {
         if (args.isEmpty()) {
             stdout.println("Myndhamr ${FoundationVersion.MILESTONE} foundation")
