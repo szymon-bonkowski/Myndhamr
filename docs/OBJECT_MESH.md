@@ -51,7 +51,7 @@ Vertex normals are area-weighted from observed winding, finite and unit-normaliz
 
 Read `object-manifest.json`, `diagnostics.json`, `mesh-diagnostics.json` and `object-all.log` (or stage log). The manifest records source reconstruction ID/hashes, versions/options/config, runtime and output hashes. Dense workspace/checkpoints/logs survive failure; a failed stage cannot become a cached success. `dense.npz`, `dense-metric.ply` and `mesh.npz` preserve full measured/derived geometry; `exports/mesh.ply`, `mesh.obj`, `mesh.glb` are final results.
 
-Open `inspection.html` directly in a browser for offline shaded/wire mesh inspection with yaw/pitch/zoom and metric dimensions. Its deterministic display sampling is limited to30,000 triangles and never alters full exports. Display centering affects only the view, never stored coordinates. Background captured geometry remains present; segmentation is outside v0.3.
+Open `inspection.html` directly in a browser for offline shaded/wire mesh inspection with an observed-corner overlay with yaw/pitch/zoom and metric dimensions. Its deterministic display sampling is limited to30,000 triangles and never alters full exports. Display centering affects only the view, never stored coordinates. Background captured geometry remains present; segmentation is outside v0.3.
 
 ## Validation and benchmarks
 
