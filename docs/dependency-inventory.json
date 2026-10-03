@@ -380,7 +380,7 @@
       "name": "Khronos independent GLB acceptance validator",
       "coordinate": "gltf-validator",
       "version": "2.0.0-dev.3.10",
-      "license": "MIT",
+      "license": "Apache-2.0",
       "scope": "test",
       "status": "used",
       "source": "tools/validate-glb.cjs",

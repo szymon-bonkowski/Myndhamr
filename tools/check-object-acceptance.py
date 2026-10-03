@@ -27,7 +27,13 @@ def check(run, controlled=False):
         tolerance=max(1e-7,np.abs(v).max()*2e-7) if fmt=='glb' else 1e-12
         np.testing.assert_allclose(m.vertices,v,atol=tolerance,rtol=0,err_msg=fmt)
         np.testing.assert_array_equal(m.faces,f,err_msg=fmt+' winding')
-        np.testing.assert_allclose(m.vertex_normals,n,atol=2e-6,rtol=0,err_msg=fmt+' normals')
+        native=o3d.io.read_triangle_mesh(str(path),enable_post_processing=False)
+        nv,nf,nn=np.asarray(native.vertices),np.asarray(native.triangles),np.asarray(native.vertex_normals)
+        # Assimp uses floats and may reorder vertices. Compare stored corner data;
+        # trimesh recomputes normals for some formats, so it is not a normal oracle.
+        native_tolerance=max(1e-7,float(np.abs(v).max())*2e-7) if fmt!='ply' else 1e-12
+        np.testing.assert_allclose(nv[nf],v[f],atol=native_tolerance,rtol=0,err_msg=fmt+' native geometry')
+        np.testing.assert_allclose(nn[nf],n[f],atol=2e-6,rtol=0,err_msg=fmt+' stored normals')
         parsed[fmt]={'passed':True,'bytes':path.stat().st_size,'maxPositionErrorMeters':float(np.abs(m.vertices-v).max())}
     sparse=Path(manifest['sparseInputPath'])
     alignment=json.loads((sparse/'aligned-model.json').read_text())['alignment']
