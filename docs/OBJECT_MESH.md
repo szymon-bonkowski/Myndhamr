@@ -62,6 +62,9 @@ tools/validate-object.sh
 # Reuse already installed CUDA environment for local object tests:
 MYNDHAMR_OBJECT_PYTHON="$PWD/build/v03-venv/bin/python" tools/validate-object.sh
 build/v03-venv/bin/python tools/check-object-acceptance.py build/object-run
+# Optional independent Khronos schema/accessor validator used in acceptance:
+npm install --prefix build/gltf-validation gltf-validator@2.0.0-dev.3.10
+node tools/validate-glb.cjs build/object-run/exports/mesh.glb
 ```
 
 Normal CI executes synthetic known-answer geometry, actual Open3D surface fixtures, adapter/checkpoint failures and independent Open3D/trimesh export reads, plus all existing suites. It does not count mocked stage orchestration as actual stereo acceptance. The benchmark measures validation, cleanup/normals, binary loading and all exporters for a12,800-triangle plane, checking known area and counts.

@@ -400,6 +400,7 @@ class SparseWorkerTests(unittest.TestCase):
         self.assertEqual(calls, ["dense", "dense"])
         self.assertEqual(recovered["reusedStages"], [])
 
+    @mock.patch("pycolmap.has_cuda", True)
     def test_stale_partial_dense_workspace_is_preserved_and_recomputed(self):
         import pycolmap
 
@@ -433,6 +434,17 @@ class SparseWorkerTests(unittest.TestCase):
         self.assertEqual(diagnostic["stage"], "dense")
         self.assertEqual(diagnostic["error"]["message"], "fresh undistort failed")
         self.assertFalse((run / "dense.npz").exists())
+
+    def test_missing_cuda_is_an_explicit_failed_dense_stage(self):
+        import pycolmap
+        run=self.root/"cpu-dense-run"
+        with mock.patch.object(pycolmap,"has_cuda",False):
+            with self.assertRaisesRegex(RuntimeError,"COLMAP dense stereo requires CUDA"):
+                WORKER.run_pipeline(self.sparse,run,_config(),stage="dense")
+        diagnostic=_json(run/"diagnostics.json")
+        self.assertEqual(diagnostic["status"],"failed")
+        self.assertEqual(diagnostic["stage"],"dense")
+        self.assertNotIn("dense",_json(run/"object-manifest.json")["stages"])
 
     def test_export_without_a_completed_mesh_fails_explicitly(self):
         run = self.root / "no-mesh-run"

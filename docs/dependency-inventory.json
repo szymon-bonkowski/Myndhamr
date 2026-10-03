@@ -375,6 +375,16 @@
       "status": "used",
       "source": "desktop-workers/object-mesh/requirements.txt",
       "license_url": "https://github.com/colmap/colmap/blob/4.2.1/COPYING.txt"
+    },
+    {
+      "name": "Khronos independent GLB acceptance validator",
+      "coordinate": "gltf-validator",
+      "version": "2.0.0-dev.3.10",
+      "license": "MIT",
+      "scope": "test",
+      "status": "used",
+      "source": "tools/validate-glb.cjs",
+      "license_url": "https://github.com/KhronosGroup/glTF-Validator/blob/main/LICENSE"
     }
   ],
   "license_policy": {
